@@ -1,0 +1,20 @@
+[project]
+name = "adb-mysql-mcp-server"
+version = "1.0.0"
+description = "An offical mcp server for Adb MySQL of Alibaba Cloud"
+readme = "README.md"
+authors = [
+    { name = "lipandong", email = "pandong.lpd@alibaba-inc.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "mcp[cli]>=1.5.0",
+    "pymysql>=1.1.1",
+]
+
+[project.scripts]
+adb-mysql-mcp-server = "adb_mysql_mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
