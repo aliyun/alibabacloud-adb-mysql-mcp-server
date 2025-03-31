@@ -7,13 +7,13 @@ retrieve Adb MySQL database metadata and execute SQL operations.
 
 ### Mode 1: Using Local File
 
-#### 1. Download the GitHub repository
+- #### Download the GitHub repository
 
 ```shell
 git clone https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server
 ```
 
-#### 2. MCP Integration
+- #### MCP Integration
 
 Add the following configuration to the MCP client configuration file:
 
@@ -42,7 +42,7 @@ Add the following configuration to the MCP client configuration file:
 
 ### Mode 2: Using PIP Mode
 
-#### 1. Installation
+- #### Installation
 
 Install MCP Server using the following package:
 
@@ -50,7 +50,7 @@ Install MCP Server using the following package:
 pip install adb-mysql-mcp-server
 ```
 
-#### 2. MCP Integration
+-  #### MCP Integration
 
 Add the following configuration to the MCP client configuration file:
 
@@ -83,14 +83,14 @@ If you want to develop your own Adb MySQL MCP Server, you can install the python
 
 1. Download the [Adb MySQL MCP Server from GitHub](https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server).
 2. Install  [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager.
-3. Install [nodejs](https://nodejs.org/en/download) which provides a node package tool whose name is `npx`
-3. Install the python dependencies in the root diretory of the project using the following command:
+3. Install [Node.js](https://nodejs.org/en/download) which provides a node package tool whose name is `npx`
+4. Install the python dependencies in the root diretory of the project using the following command:
 
 ```shell
 uv pip install -r pyproject.toml 
 ```
 
-4. If you want to debug the mcp server locally, you could start up a [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) using the following command:
+5. If you want to debug the mcp server locally, you could start up an [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector) using the following command:
 
 ```shell
 npx @modelcontextprotocol/inspector  \
@@ -104,28 +104,28 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 
 ## 3. Introduction to the components of Adb MySQL MCP Server
 
-### 3.1. Tools
+- ### Tools
 
-* `execute_sql`: Execute a SQL query in the Adb MySQL Cluster
+    - `execute_sql`: Execute a SQL query in the Adb MySQL Cluster
 
-* `get_query_plan`: Get the query plan for a SQL query
+    - `get_query_plan`: Get the query plan for a SQL query
 
-* `get_execution_plan`: Get the actual execution plan with runtime statistics for a SQL query
+    - `get_execution_plan`: Get the actual execution plan with runtime statistics for a SQL query
 
-### 3.2. Resources
+- ### Resources
 
-#### Built-in Resources
+    - #### Built-in Resources
 
-* `adbmysql:///databases`: Get all the databases in the adb mysql cluster
+        - `adbmysql:///databases`: Get all the databases in the adb mysql cluster
 
-#### 3.3 Resource Templates
+    - #### Resource Templates
 
-* `adbmysql:///{schema}/tables`: Get all the tables in a specific database
+        - `adbmysql:///{schema}/tables`: Get all the tables in a specific database
 
-* `adbmysql:///{database}/{table}/ddl`: Get the DDL script of a table in a specific database
+        - `adbmysql:///{database}/{table}/ddl`: Get the DDL script of a table in a specific database
 
-* `adbmysql:///{config}/{key}/value`: Get the value for a config key in the cluster
+        - `adbmysql:///{config}/{key}/value`: Get the value for a config key in the cluster
 
-### Prompts
+- ### Prompts
 
 Not provided at the present moment.
