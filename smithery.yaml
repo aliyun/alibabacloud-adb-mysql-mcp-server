@@ -1,0 +1,52 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - adbMysqlHost
+      - adbMysqlUser
+      - adbMysqlPassword
+      - adbMysqlDatabase
+    properties:
+      adbMysqlHost:
+        type: string
+        description: Hostname or IP address of the Adb MySQL server
+      adbMysqlPort:
+        type: number
+        default: 3306
+        description: Port number of the Adb MySQL server
+      adbMysqlUser:
+        type: string
+        default: ""
+        description: Username for the Adb MySQL database
+      adbMysqlPassword:
+        type: string
+        default: ""
+        description: Password for the Adb MySQL database
+      adbMysqlDatabase:
+        type: string
+        default: ""
+        description: Name of the Adb MySQL database
+  commandFunction:
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
+    |-
+    (config) => ({
+      command: 'adb-mysql-mcp-server',
+      args: [],
+      env: {
+        ADB_MYSQL_HOST: config.adbMysqlHost,
+        ADB_MYSQL_PORT: String(config.adbMysqlPort || 3306),
+        ADB_MYSQL_USER: config.adbMysqlUser,
+        ADB_MYSQL_PASSWORD: config.adbMysqlPassword,
+        ADB_MYSQL_DATABASE: config.adbMysqlDatabase
+      }
+    })
+  exampleConfig:
+    adbMysqlHost: 127.0.0.1
+    adbMysqlPort: 3306
+    adbMysqlUser: root
+    adbMysqlPassword: secret
+    adbMysqlDatabase: sample_db
