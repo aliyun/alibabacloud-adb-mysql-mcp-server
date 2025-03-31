@@ -1,6 +1,6 @@
-# Adb MySQL MCP Server
+# AnalyticDB for MySQL MCP Server
 
-Adb MySQL MCP Server serves as a universal interface between AI Agents and Adb MySQL databases. It enables seamless communication between AI Agents and Adb MySQL, helping AI Agents
+AnalyticDB for MySQL MCP Server serves as a universal interface between AI Agents and Adb MySQL databases. It enables seamless communication between AI Agents and Adb MySQL, helping AI Agents
 retrieve Adb MySQL database metadata and execute SQL operations.
 
 ## 1. MCP Client Configuration
@@ -77,11 +77,11 @@ Add the following configuration to the MCP client configuration file:
 }
 ```
 
-## 2. Develop your own Adb MySQL MCP server
+## 2. Develop your own AnalyticDB for MySQL MCP server
 
-If you want to develop your own Adb MySQL MCP Server, you can install the python dependency packages using the following command:
+If you want to develop your own AnalyticDB for MySQL MCP Server, you can install the python dependency packages using the following command:
 
-1. Download the [Adb MySQL MCP Server from GitHub](https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server).
+1. Download the [source code from GitHub](https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server).
 2. Install  [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager.
 3. Install [Node.js](https://nodejs.org/en/download) which provides a node package tool whose name is `npx`
 4. Install the python dependencies in the root diretory of the project using the following command:
@@ -102,11 +102,11 @@ npx @modelcontextprotocol/inspector  \
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server 
 ```
 
-## 3. Introduction to the components of Adb MySQL MCP Server
+## 3. Introduction to the components of AnalyticDB for MySQL MCP Server
 
 - ### Tools
 
-    - `execute_sql`: Execute a SQL query in the Adb MySQL Cluster
+    - `execute_sql`: Execute a SQL query in the AnalyticDB for MySQL Cluster
 
     - `get_query_plan`: Get the query plan for a SQL query
 
@@ -116,7 +116,7 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 
     - #### Built-in Resources
 
-        - `adbmysql:///databases`: Get all the databases in the adb mysql cluster
+        - `adbmysql:///databases`: Get all the databases in the analytic for mysql cluster
 
     - #### Resource Templates
 
