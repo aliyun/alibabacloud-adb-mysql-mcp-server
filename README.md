@@ -1,9 +1,18 @@
 # Adb MySQL MCP Server
+[![smithery badge](https://smithery.ai/badge/@aliyun/alibabacloud-adb-mysql-mcp-server)](https://smithery.ai/server/@aliyun/alibabacloud-adb-mysql-mcp-server)
 
 Adb MySQL MCP Server serves as a universal interface between AI Agents and Adb MySQL databases. It enables seamless communication between AI Agents and Adb MySQL, helping AI Agents
 retrieve Adb MySQL database metadata and execute SQL operations.
 
 ## 1. MCP Client Configuration
+
+### Installing via Smithery
+
+To install Adb MySQL MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@aliyun/alibabacloud-adb-mysql-mcp-server):
+
+```bash
+npx -y @smithery/cli install @aliyun/alibabacloud-adb-mysql-mcp-server --client claude
+```
 
 ### Mode 1: Using Local File
 
