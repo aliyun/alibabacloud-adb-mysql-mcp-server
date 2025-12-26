@@ -120,11 +120,11 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 
     - #### Resource Templates
 
-        - `adbmysql:///{schema}/tables`: Get all the tables in a specific database
+        - `adbmysql:///{database}/tables`: Get all the tables in a specific database
 
         - `adbmysql:///{database}/{table}/ddl`: Get the DDL script of a table in a specific database
 
-        - `adbmysql:///{config}/{key}/value`: Get the value for a config key in the cluster
+        - `adbmysql:///config/{key}/value`: Get the value for a config key in the cluster
 
 - ### Prompts
 
