@@ -3,6 +3,10 @@
 AnalyticDB for MySQL MCP Server serves as a universal interface between AI Agents and [AnalyticDB for MySQL](https://www.alibabacloud.com/en/product/analyticdb-for-mysql) databases. It enables seamless communication between AI Agents and AnalyticDB for MySQL, helping AI Agents
 retrieve AnalyticDB for MySQL database metadata and execute SQL operations.
 
+<a href="https://glama.ai/mcp/servers/@aliyun/alibabacloud-adb-mysql-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@aliyun/alibabacloud-adb-mysql-mcp-server/badge" alt="Adb MySQL Server MCP server" />
+</a>
+
 ## 1. MCP Client Configuration
 
 ### Mode 1: Using Local File
