@@ -9,29 +9,62 @@ AnalyticDB for MySQL MCP Server is a universal interface between AI Agents and [
 
 Read-only tools are annotated with `ToolAnnotations(readOnlyHint=True)` per the MCP protocol, allowing clients to distinguish them from mutating operations.
 
-## Prerequisites
+## 一、Prerequisites
 
 - Python >= 3.13
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended package manager and runner)
 - Alibaba Cloud AccessKey (required for OpenAPI tools)
 - Optional: ADB MySQL connection credentials (for SQL tools in direct-connection mode)
 
-## Quick Start
+## 二、Quick Start
 
-### Option 1: Local Source + stdio
+### 2.1 Using [cherry-studio](https://github.com/CherryHQ/cherry-studio) (Recommended)
 
-```shell
-git clone https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server
-cd alibabacloud-adb-mysql-mcp-server
-uv sync
-```
+1. Download and install [cherry-studio](https://github.com/CherryHQ/cherry-studio)
+2. Follow the [documentation](https://docs.cherry-ai.com/cherry-studio/download) to install `uv`, which is required for the MCP environment
+3. Configure and use ADB MySQL MCP according to the [documentation](https://docs.cherry-ai.com/advanced-basic/mcp/install). You can quickly import the configuration using the JSON below.
 
-Add the following to your MCP client configuration:
+![cherry-studio configuration](assets/cherry-config.png)
+
+**Configuration A — SQL tools only (execute queries, view plans, browse metadata):**
 
 ```json
 {
   "mcpServers": {
     "adb-mysql-mcp-server": {
+      "name": "adb-mysql-mcp-server",
+      "type": "stdio",
+      "isActive": true,
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
+        "run",
+        "adb-mysql-mcp-server"
+      ],
+      "env": {
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database"
+      }
+    }
+  }
+}
+```
+
+**Configuration B — OpenAPI tools (cluster management, diagnostics, monitoring):**
+
+> **Note**: Please set `ALIBABA_CLOUD_ACCESS_KEY_ID` and `ALIBABA_CLOUD_ACCESS_KEY_SECRET` to your Alibaba Cloud AccessKey credentials.
+
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "name": "adb-mysql-mcp-server",
+      "type": "stdio",
+      "isActive": true,
       "command": "uv",
       "args": [
         "--directory",
@@ -48,46 +81,65 @@ Add the following to your MCP client configuration:
 }
 ```
 
-### Option 2: pip Install + stdio
+> You can combine both configurations by setting all environment variables together. When AK/SK is not configured, OpenAPI tools are automatically disabled — only SQL tools remain active.
 
-```bash
-pip install adb-mysql-mcp-server
+### 2.2 Using Claude Code
+
+Download from GitHub and sync dependencies:
+
+```shell
+git clone https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server
+cd alibabacloud-adb-mysql-mcp-server
+uv sync
 ```
 
-```json
+Add the following configuration to the Claude Code MCP config file (project-level: `.mcp.json` in the project root, or user-level: `~/.claude/settings.json`):
+
+**stdio transport:**
+
+```json5
 {
   "mcpServers": {
     "adb-mysql-mcp-server": {
       "command": "uv",
       "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
         "run",
-        "--with",
-        "adb-mysql-mcp-server",
         "adb-mysql-mcp-server"
       ],
       "env": {
         "ALIBABA_CLOUD_ACCESS_KEY_ID": "your_access_key_id",
-        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret"
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret",
+        "ALIBABA_CLOUD_SECURITY_TOKEN": "",
+        // Uncomment the following lines to enable SQL tools for direct database connection:
+        // "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        // "ADB_MYSQL_PORT": "3306",
+        // "ADB_MYSQL_USER": "your_username",
+        // "ADB_MYSQL_PASSWORD": "your_password",
+        // "ADB_MYSQL_DATABASE": "your_database"
       }
     }
   }
 }
 ```
 
-### Option 3: SSE Transport
-
-Start the HTTP SSE server by setting `SERVER_TRANSPORT=sse`:
+**SSE transport** — start the server first, then configure the client:
 
 ```bash
 export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
 export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+# Uncomment the following lines to enable SQL tools for direct database connection:
+# export ADB_MYSQL_HOST="your_adb_mysql_host"
+# export ADB_MYSQL_PORT="3306"
+# export ADB_MYSQL_USER="your_username"
+# export ADB_MYSQL_PASSWORD="your_password"
+# export ADB_MYSQL_DATABASE="your_database"
 export SERVER_TRANSPORT=sse
 export SERVER_PORT=8000
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
-
-Client SSE configuration:
 
 ```json
 {
@@ -99,20 +151,22 @@ Client SSE configuration:
 }
 ```
 
-### Option 4: Streamable HTTP Transport
-
-Start the Streamable HTTP server by setting `SERVER_TRANSPORT=streamable_http`:
+**Streamable HTTP transport** — start the server first, then configure the client:
 
 ```bash
 export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
 export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+# Uncomment the following lines to enable SQL tools for direct database connection:
+# export ADB_MYSQL_HOST="your_adb_mysql_host"
+# export ADB_MYSQL_PORT="3306"
+# export ADB_MYSQL_USER="your_username"
+# export ADB_MYSQL_PASSWORD="your_password"
+# export ADB_MYSQL_DATABASE="your_database"
 export SERVER_TRANSPORT=streamable_http
 export SERVER_PORT=8000
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
-
-Client Streamable HTTP configuration:
 
 ```json
 {
@@ -124,40 +178,28 @@ Client Streamable HTTP configuration:
 }
 ```
 
-### Option 5: SQL-Only Mode (No AK/SK Required)
+> **Note**: When `ADB_MYSQL_USER` and `ADB_MYSQL_PASSWORD` are not configured but AK/SK is available, a temporary database account is automatically created via OpenAPI for SQL execution and cleaned up afterward.
 
-If you only need SQL tools (execute queries, view execution plans, browse database metadata) without OpenAPI management tools, you can configure the server with database credentials only — no Alibaba Cloud AccessKey is needed.
+### 2.3 Using Cline
 
-The following example uses SSE transport:
+Set environment variables and run the MCP server:
 
 ```bash
-export ADB_MYSQL_HOST="your_adb_mysql_host"
-export ADB_MYSQL_PORT="3306"
-export ADB_MYSQL_USER="your_username"
-export ADB_MYSQL_PASSWORD="your_password"
-export ADB_MYSQL_DATABASE="your_database"
-export MCP_TOOLSETS=sql
+export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
 export SERVER_TRANSPORT=sse
 export SERVER_PORT=8000
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
 
-Client configuration:
+Then configure the Cline remote server:
 
-```json
-{
-  "mcpServers": {
-    "adb-mysql-mcp-server": {
-      "url": "http://localhost:8000/sse"
-    }
-  }
-}
+```
+remote_server = "http://127.0.0.1:8000/sse"
 ```
 
-> Set `MCP_TOOLSETS=sql` to activate only the SQL tools and MCP resources. OpenAPI tools that require AK/SK will not be loaded. For other transport modes (stdio, streamable_http), refer to the corresponding options above.
-
-## Environment Variables
+## 三、Environment Variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
@@ -174,35 +216,10 @@ Client configuration:
 | `ADB_API_READ_TIMEOUT` | No | OpenAPI read timeout in milliseconds, default 300000 (5min) |
 | `SERVER_TRANSPORT` | No | Transport protocol: `stdio` (default), `sse`, `streamable_http` |
 | `SERVER_PORT` | No | SSE/HTTP server port, default 8000 |
-| `MCP_TOOLSETS` | No | Enabled toolset groups, comma-separated, default `openapi,sql` (all) |
 
-> **SQL tool connection modes**: When `ADB_MYSQL_USER` and `ADB_MYSQL_PASSWORD` are configured, SQL tools connect directly using the provided credentials. When not configured, a temporary database account is automatically created via OpenAPI, used for SQL execution, and cleaned up afterward.
+## 四、Tool List
 
-## Toolset Grouping
-
-Tools and resources are organized into groups, controlled via the `MCP_TOOLSETS` environment variable:
-
-| Group | Description |
-| --- | --- |
-| `openapi` | Cluster management & diagnostics (OpenAPI) |
-| `sql` | SQL execution & metadata browsing |
-| `all` | Shortcut, equivalent to `openapi,sql` |
-
-**Example**: Enable only OpenAPI tools:
-
-```bash
-export MCP_TOOLSETS=openapi
-```
-
-Enable only SQL tools and resources:
-
-```bash
-export MCP_TOOLSETS=sql
-```
-
-## Tool List
-
-### Cluster Management (group: `openapi`)
+### 4.1 Cluster Management (group: `openapi`)
 
 | Tool | Description |
 | --- | --- |
@@ -214,7 +231,7 @@ export MCP_TOOLSETS=sql
 | `describe_cluster_net_info` | Get cluster network connection info |
 | `get_current_time` | Get current server time |
 
-### Diagnostics & Monitoring (group: `openapi`)
+### 4.2 Diagnostics & Monitoring (group: `openapi`)
 
 | Tool | Description |
 | --- | --- |
@@ -226,7 +243,7 @@ export MCP_TOOLSETS=sql
 | `describe_sql_patterns` | Query SQL pattern list |
 | `describe_table_statistics` | Query table-level statistics |
 
-### Administration & Audit (group: `openapi`)
+### 4.3 Administration & Audit (group: `openapi`)
 
 | Tool | Description |
 | --- | --- |
@@ -235,7 +252,7 @@ export MCP_TOOLSETS=sql
 | `describe_db_cluster_space_summary` | Get cluster storage space summary |
 | `describe_audit_log_records` | Query SQL audit log records |
 
-### Advanced Diagnostics (group: `openapi`)
+### 4.4 Advanced Diagnostics (group: `openapi`)
 
 | Tool | Description |
 | --- | --- |
@@ -250,7 +267,7 @@ export MCP_TOOLSETS=sql
 | `describe_table_partition_diagnose` | Diagnose table partitioning issues |
 | `describe_inclined_tables` | Detect data-skewed tables |
 
-### SQL Tools (group: `sql`)
+### 4.5 SQL Tools (group: `sql`)
 
 | Tool | Description |
 | --- | --- |
@@ -258,7 +275,7 @@ export MCP_TOOLSETS=sql
 | `get_query_plan` | Get EXPLAIN execution plan |
 | `get_execution_plan` | Get EXPLAIN ANALYZE actual execution plan |
 
-### MCP Resources (group: `sql`)
+### 4.6 MCP Resources (group: `sql`)
 
 | Resource URI | Description |
 | --- | --- |
@@ -267,7 +284,7 @@ export MCP_TOOLSETS=sql
 | `adbmysql:///{database}/{table}/ddl` | Get table DDL |
 | `adbmysql:///config/{key}/value` | Get a config key value |
 
-## Local Development
+## 五、Local Development
 
 ```shell
 git clone https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server
@@ -289,6 +306,16 @@ npx @modelcontextprotocol/inspector \
   -e ALIBABA_CLOUD_ACCESS_KEY_SECRET=your_sk \
   uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
+## 六、SKILL
+
+In addition to the MCP server above, this project also provides an **independent** SKILL under the `skill/` directory. The Skill can be deployed directly to Claude Code without relying on this MCP server (it calls ADB MySQL OpenAPI through `call_adb_api.py` in the SKILL directory).
+
+The Skill covers cluster information queries, performance monitoring, slow query diagnosis, SQL Pattern analysis, and SQL execution, with built-in guided diagnostic workflows for common scenarios.
+
+For setup and usage details, see [skill/skill_readme.md](skill/skill_readme.md).
+
+> **Note**: The evolution of this Skill will be aligned with our next-generation Agent in the future. Stay tuned.
+
 
 ## License
 

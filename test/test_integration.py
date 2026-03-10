@@ -166,6 +166,24 @@ class TestDescribeDiagnosisRecords:
         assert isinstance(result, dict)
         assert "RequestId" in result
 
+    async def test_with_query_condition_running(self, region_id, db_cluster_id):
+        """使用 query_condition 过滤运行中的 SQL"""
+        result = await server.describe_diagnosis_records(
+            region_id, db_cluster_id,
+            query_condition='{"Type":"status","Value":"running"}',
+        )
+        assert isinstance(result, dict)
+        assert "RequestId" in result
+
+    async def test_with_query_condition_max_cost(self, region_id, db_cluster_id):
+        """使用 query_condition 查询耗时最长的 Top 100 SQL"""
+        result = await server.describe_diagnosis_records(
+            region_id, db_cluster_id,
+            query_condition='{"Type":"maxCost","Value":"100"}',
+        )
+        assert isinstance(result, dict)
+        assert "RequestId" in result
+
 
 class TestDescribeDiagnosisSqlInfo:
     """集成测试：describe_diagnosis_sql_info —— 查询单条 SQL 执行详情

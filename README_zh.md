@@ -9,29 +9,62 @@ AnalyticDB for MySQL MCP Server 是 AI Agent 与 [AnalyticDB MySQL](https://www.
 
 只读工具标注了 `ToolAnnotations(readOnlyHint=True)`（MCP 协议标准能力），便于客户端区分只读操作和变更操作。
 
-## 前置条件
+## 一、前置条件
 
 - Python >= 3.13
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)（推荐的包管理和运行工具）
 - 阿里云 AccessKey（用于 OpenAPI 类工具）
 - 可选：ADB MySQL 连接信息（用于 SQL 类工具的直连模式）
 
-## 快速开始
+## 二、快速开始
 
-### 方式一：本地源码 + stdio
+### 2.1 使用 [cherry-studio](https://github.com/CherryHQ/cherry-studio)（推荐）
 
-```shell
-git clone https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server
-cd alibabacloud-adb-mysql-mcp-server
-uv sync
-```
+1. 下载并安装 [cherry-studio](https://github.com/CherryHQ/cherry-studio)
+2. 参考[文档](https://docs.cherry-ai.com/cherry-studio/download)安装 `uv`，这是 MCP 运行环境所必需的
+3. 参考 [MCP 配置文档](https://docs.cherry-ai.com/advanced-basic/mcp/install)进行配置。你可以直接导入以下 JSON 配置。
 
-在 MCP 客户端配置文件中添加：
+![cherry-studio 配置示例](assets/cherry-config.png)
+
+**配置 A — 仅 SQL 工具（执行查询、查看执行计划、浏览元数据）：**
 
 ```json
 {
   "mcpServers": {
     "adb-mysql-mcp-server": {
+      "name": "adb-mysql-mcp-server",
+      "type": "stdio",
+      "isActive": true,
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
+        "run",
+        "adb-mysql-mcp-server"
+      ],
+      "env": {
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database"
+      }
+    }
+  }
+}
+```
+
+**配置 B — OpenAPI 工具（集群管理、诊断、监控）：
+
+> **注意**： 请将`ALIBABA_CLOUD_ACCESS_KEY_ID`和`ALIBABA_CLOUD_ACCESS_KEY_SECRET`配置成阿里云AKSK。
+
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "name": "adb-mysql-mcp-server",
+      "type": "stdio",
+      "isActive": true,
       "command": "uv",
       "args": [
         "--directory",
@@ -48,46 +81,65 @@ uv sync
 }
 ```
 
-### 方式二：pip 安装 + stdio
+> 你也可以同时设置所有环境变量来启用 OpenAPI 工具和 SQL 工具。如果未配置 AK/SK，OpenAPI 工具会自动禁用，仅保留 SQL 工具。
 
-```bash
-pip install adb-mysql-mcp-server
+### 2.2 使用 Claude Code
+
+从 GitHub 下载并同步依赖：
+
+```shell
+git clone https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server
+cd alibabacloud-adb-mysql-mcp-server
+uv sync
 ```
 
-```json
+将以下配置添加到 Claude Code MCP 配置文件中（项目级：项目根目录下的 `.mcp.json`，或用户级：`~/.claude/settings.json`）：
+
+**stdio 传输模式：**
+
+```json5
 {
   "mcpServers": {
     "adb-mysql-mcp-server": {
       "command": "uv",
       "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
         "run",
-        "--with",
-        "adb-mysql-mcp-server",
         "adb-mysql-mcp-server"
       ],
       "env": {
         "ALIBABA_CLOUD_ACCESS_KEY_ID": "your_access_key_id",
-        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret"
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret",
+        "ALIBABA_CLOUD_SECURITY_TOKEN": "",
+        // 如需连接具体实例执行 SQL，取消以下注释：
+        // "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        // "ADB_MYSQL_PORT": "3306",
+        // "ADB_MYSQL_USER": "your_username",
+        // "ADB_MYSQL_PASSWORD": "your_password",
+        // "ADB_MYSQL_DATABASE": "your_database"
       }
     }
   }
 }
 ```
 
-### 方式三：SSE 传输模式
-
-通过设置 `SERVER_TRANSPORT=sse` 启动 HTTP SSE 服务：
+**SSE 传输模式** — 先启动服务端，再配置客户端：
 
 ```bash
 export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
 export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+# 如需连接具体实例执行 SQL，取消以下注释：
+# export ADB_MYSQL_HOST="your_adb_mysql_host"
+# export ADB_MYSQL_PORT="3306"
+# export ADB_MYSQL_USER="your_username"
+# export ADB_MYSQL_PASSWORD="your_password"
+# export ADB_MYSQL_DATABASE="your_database"
 export SERVER_TRANSPORT=sse
 export SERVER_PORT=8000
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
-
-客户端配置 SSE 连接：
 
 ```json
 {
@@ -99,20 +151,22 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 }
 ```
 
-### 方式四：Streamable HTTP 传输模式
-
-通过设置 `SERVER_TRANSPORT=streamable_http` 启动 Streamable HTTP 服务：
+**Streamable HTTP 传输模式** — 先启动服务端，再配置客户端：
 
 ```bash
 export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
 export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+# 如需连接具体实例执行 SQL，取消以下注释：
+# export ADB_MYSQL_HOST="your_adb_mysql_host"
+# export ADB_MYSQL_PORT="3306"
+# export ADB_MYSQL_USER="your_username"
+# export ADB_MYSQL_PASSWORD="your_password"
+# export ADB_MYSQL_DATABASE="your_database"
 export SERVER_TRANSPORT=streamable_http
 export SERVER_PORT=8000
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
-
-客户端配置 Streamable HTTP 连接：
 
 ```json
 {
@@ -124,40 +178,28 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 }
 ```
 
-### 方式五：仅 SQL 模式（无需 AK/SK）
+> **说明**：如果未配置 `ADB_MYSQL_USER` / `ADB_MYSQL_PASSWORD` 但配置了 AK/SK，系统会通过 OpenAPI 自动创建临时数据库账号执行 SQL，执行完毕后自动清理。
 
-如果只需要使用 SQL 工具（执行查询、查看执行计划、浏览数据库元数据），无需 OpenAPI 管理类工具，可以仅配置数据库连接信息，不需要阿里云 AccessKey。
+### 2.3 使用 Cline
 
-以下示例使用 SSE 传输模式：
+设置环境变量并启动 MCP 服务：
 
 ```bash
-export ADB_MYSQL_HOST="your_adb_mysql_host"
-export ADB_MYSQL_PORT="3306"
-export ADB_MYSQL_USER="your_username"
-export ADB_MYSQL_PASSWORD="your_password"
-export ADB_MYSQL_DATABASE="your_database"
-export MCP_TOOLSETS=sql
+export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
 export SERVER_TRANSPORT=sse
 export SERVER_PORT=8000
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
 
-客户端配置：
+然后配置 Cline 远程服务地址：
 
-```json
-{
-  "mcpServers": {
-    "adb-mysql-mcp-server": {
-      "url": "http://localhost:8000/sse"
-    }
-  }
-}
+```
+remote_server = "http://127.0.0.1:8000/sse"
 ```
 
-> 设置 `MCP_TOOLSETS=sql` 仅激活 SQL 工具和 MCP 资源，不加载需要 AK/SK 的 OpenAPI 工具。如需使用其他传输协议（stdio、streamable_http），请参考上述对应方式。
-
-## 环境变量
+## 三、环境变量
 
 | 变量名 | 必需 | 说明 |
 | --- | --- | --- |
@@ -174,35 +216,10 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 | `ADB_API_READ_TIMEOUT` | 否 | OpenAPI 读取超时（毫秒），默认 300000（5分钟） |
 | `SERVER_TRANSPORT` | 否 | 传输协议：`stdio`（默认）、`sse`、`streamable_http` |
 | `SERVER_PORT` | 否 | SSE/HTTP 服务端口，默认 8000 |
-| `MCP_TOOLSETS` | 否 | 启用的工具集，逗号分隔，默认 `openapi,sql`（全部） |
 
-> **SQL 工具连接模式说明**：当配置了 `ADB_MYSQL_USER` 和 `ADB_MYSQL_PASSWORD` 时，SQL 工具使用直连模式。未配置时，自动通过 OpenAPI 创建临时账号执行 SQL，执行完毕后自动清理。
+## 四、工具列表
 
-## 工具集分组
-
-工具和资源分为两个组，可通过 `MCP_TOOLSETS` 环境变量控制启用：
-
-| 组名 | 说明 |
-| --- | --- |
-| `openapi` | 集群管理与诊断（OpenAPI） |
-| `sql` | SQL 执行与元数据浏览 |
-| `all` | 快捷方式，等同于 `openapi,sql` |
-
-**示例**：仅启用 OpenAPI 工具：
-
-```bash
-export MCP_TOOLSETS=openapi
-```
-
-仅启用 SQL 工具和资源：
-
-```bash
-export MCP_TOOLSETS=sql
-```
-
-## 工具列表
-
-### 集群管理（组: `openapi`）
+### 4.1 集群管理（组: `openapi`）
 
 | 工具名 | 说明 |
 | --- | --- |
@@ -214,7 +231,7 @@ export MCP_TOOLSETS=sql
 | `describe_cluster_net_info` | 查询集群网络信息 |
 | `get_current_time` | 获取当前服务器时间 |
 
-### 诊断与监控（组: `openapi`）
+### 4.2 诊断与监控（组: `openapi`）
 
 | 工具名 | 说明 |
 | --- | --- |
@@ -226,7 +243,7 @@ export MCP_TOOLSETS=sql
 | `describe_sql_patterns` | 查询 SQL Pattern 列表 |
 | `describe_table_statistics` | 查询表统计信息 |
 
-### 管控与审计（组: `openapi`）
+### 4.3 管控与审计（组: `openapi`）
 
 | 工具名 | 说明 |
 | --- | --- |
@@ -235,7 +252,7 @@ export MCP_TOOLSETS=sql
 | `describe_db_cluster_space_summary` | 查询集群空间概览 |
 | `describe_audit_log_records` | 查询 SQL 审计日志 |
 
-### 高级诊断（组: `openapi`）
+### 4.4 高级诊断（组: `openapi`）
 
 | 工具名 | 说明 |
 | --- | --- |
@@ -250,7 +267,7 @@ export MCP_TOOLSETS=sql
 | `describe_table_partition_diagnose` | 分区表问题诊断 |
 | `describe_inclined_tables` | 检测数据倾斜表 |
 
-### SQL 工具（组: `sql`）
+### 4.5 SQL 工具（组: `sql`）
 
 | 工具名 | 说明 |
 | --- | --- |
@@ -258,7 +275,7 @@ export MCP_TOOLSETS=sql
 | `get_query_plan` | 获取 SQL 的 EXPLAIN 执行计划 |
 | `get_execution_plan` | 获取 SQL 的 EXPLAIN ANALYZE 实际执行计划 |
 
-### MCP 资源（组: `sql`）
+### 4.6 MCP 资源（组: `sql`）
 
 | 资源 URI | 说明 |
 | --- | --- |
@@ -267,7 +284,7 @@ export MCP_TOOLSETS=sql
 | `adbmysql:///{database}/{table}/ddl` | 获取指定表的 DDL |
 | `adbmysql:///config/{key}/value` | 获取指定配置项的值 |
 
-## 本地开发
+## 五、本地开发
 
 ```shell
 git clone https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server
@@ -289,6 +306,16 @@ npx @modelcontextprotocol/inspector \
   -e ALIBABA_CLOUD_ACCESS_KEY_SECRET=your_sk \
   uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
+## 六、SKILL
+
+除了上述 MCP Server，本项目还在 `skill/` 目录下提供了一个**独立的** SKILL。该技能可以直接部署到 Claude Code，无需依赖本 MCP Server（是通过该SKILL目录下的`call_adb_api.py`实现对ADBMySQL OpenApi的调用）。
+
+技能覆盖集群信息查询、性能监控、慢查询诊断、SQL Pattern 分析、SQL 执行等场景，并内置了常见诊断场景的引导式工作流。
+
+详细的安装和使用说明请参见 [skill/skill_readme_cn.md](skill/skill_readme_cn.md)。
+
+> **说明**：后续 Skill 的演进将对接我们新版的 Agent，敬请期待。
+
 
 ## License
 

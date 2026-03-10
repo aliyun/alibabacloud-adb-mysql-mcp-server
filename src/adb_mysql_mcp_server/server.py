@@ -85,7 +85,9 @@ async def describe_db_clusters(region_id: str) -> str:
         region_id: Alibaba Cloud region ID (e.g. cn-hangzhou).
     """
     client = get_adb_client(region_id)
-    request = adb_models.DescribeDBClustersRequest(region_id=region_id, page_number=1, page_size=100)
+    request = adb_models.DescribeDBClustersRequest(
+        region_id=region_id, page_number=1, page_size=100, dbcluster_version="All",
+    )
     response = client.describe_dbclusters(request)
     items = response.body.items.dbcluster if response.body.items and response.body.items.dbcluster else []
     res = json_array_to_csv(items)
@@ -286,7 +288,10 @@ async def describe_diagnosis_records(
         db_cluster_id: Cluster ID (e.g. amv-xxx).
         start_time: Start time in ISO 8601 UTC (e.g. 2025-01-01T00:00Z). Defaults to 1 hour ago.
         end_time: End time in ISO 8601 UTC (e.g. 2025-01-01T01:00Z). Defaults to now.
-        query_condition: Optional SQL filter condition.
+        query_condition: JSON filter condition. Supported types:
+            - {"Type":"maxCost","Value":"100"} — top 100 queries by cost.
+            - {"Type":"status","Value":"running"} — filter by status (running/finished/failed).
+            - {"Type":"cost","Min":"10","Max":"200"} — filter by cost range (ms).
         resource_group: Optional resource group name filter.
         database: Optional database name filter.
         user_name: Optional user name filter.
@@ -1082,16 +1087,32 @@ def _parse_groups(source: str | None) -> list[str]:
     return list(dict.fromkeys(expanded)) or list(DEFAULT_GROUPS)
 
 
+def _has_openapi_credentials() -> bool:
+    """Check whether Alibaba Cloud AK/SK credentials are configured."""
+    ak = os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+    sk = os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+    return bool(ak and sk)
+
+
 def main(toolsets: Optional[str] = None) -> None:
     """MCP Server main entry point.
 
     Flow:
       1. Parse enabled toolset groups (from argument or MCP_TOOLSETS env var).
-      2. Call mcp.activate() to register deferred tools/resources into FastMCP.
-      3. Start the server using the transport specified by SERVER_TRANSPORT.
+      2. Auto-disable 'openapi' group when AK/SK credentials are missing.
+      3. Call mcp.activate() to register deferred tools/resources into FastMCP.
+      4. Start the server using the transport specified by SERVER_TRANSPORT.
     """
     source_string = toolsets or os.getenv("MCP_TOOLSETS")
     enabled_groups = _parse_groups(source_string)
+
+    if "openapi" in enabled_groups and not _has_openapi_credentials():
+        enabled_groups.remove("openapi")
+        logger.warning(
+            "OpenAPI tools disabled: ALIBABA_CLOUD_ACCESS_KEY_ID / "
+            "ALIBABA_CLOUD_ACCESS_KEY_SECRET not configured."
+        )
+
     mcp.activate(enabled_groups=enabled_groups)
 
     transport = os.getenv("SERVER_TRANSPORT", "stdio")

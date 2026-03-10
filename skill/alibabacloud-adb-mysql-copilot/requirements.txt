@@ -4,3 +4,4 @@
 alibabacloud-adb20211201>=3.7.0
 alibabacloud-tea-openapi>=0.3.0
 alibabacloud-tea-util>=0.3.0
+pymysql>=1.1.1

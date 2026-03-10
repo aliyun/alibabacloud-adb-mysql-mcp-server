@@ -2,11 +2,14 @@
 
 测试范围：
   - _parse_groups 函数的各种输入场景
+  - _has_openapi_credentials 函数在不同环境变量下的行为
   - 工具/资源的注册数量和分组
   - GROUP_EXPANSIONS 和 DEFAULT_GROUPS 常量
 """
 
-from adb_mysql_mcp_server.server import mcp, _parse_groups, GROUP_EXPANSIONS, DEFAULT_GROUPS
+from unittest import mock
+
+from adb_mysql_mcp_server.server import mcp, _parse_groups, _has_openapi_credentials, GROUP_EXPANSIONS, DEFAULT_GROUPS
 from adb_mysql_mcp_server.core.mcp import _ComponentType
 
 
@@ -49,6 +52,43 @@ class TestParseGroups:
     def test_custom_group_passthrough(self):
         """未在 GROUP_EXPANSIONS 中定义的自定义分组名应原样返回"""
         assert _parse_groups("custom") == ["custom"]
+
+
+class TestHasOpenApiCredentials:
+    """测试 _has_openapi_credentials 函数——判断 AK/SK 是否已配置"""
+
+    def test_returns_true_when_both_set(self):
+        """AK 和 SK 都配置时，应返回 True"""
+        with mock.patch.dict("os.environ", {
+            "ALIBABA_CLOUD_ACCESS_KEY_ID": "ak123",
+            "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "sk456",
+        }):
+            assert _has_openapi_credentials() is True
+
+    def test_returns_false_when_ak_missing(self):
+        """只配置了 SK 而没有 AK 时，应返回 False"""
+        env = {"ALIBABA_CLOUD_ACCESS_KEY_SECRET": "sk456"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            assert _has_openapi_credentials() is False
+
+    def test_returns_false_when_sk_missing(self):
+        """只配置了 AK 而没有 SK 时，应返回 False"""
+        env = {"ALIBABA_CLOUD_ACCESS_KEY_ID": "ak123"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            assert _has_openapi_credentials() is False
+
+    def test_returns_false_when_both_missing(self):
+        """AK 和 SK 都未配置时，应返回 False"""
+        with mock.patch.dict("os.environ", {}, clear=True):
+            assert _has_openapi_credentials() is False
+
+    def test_returns_false_when_empty_strings(self):
+        """AK 或 SK 为空字符串时，应返回 False"""
+        with mock.patch.dict("os.environ", {
+            "ALIBABA_CLOUD_ACCESS_KEY_ID": "",
+            "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "",
+        }):
+            assert _has_openapi_credentials() is False
 
 
 class TestToolRegistration:

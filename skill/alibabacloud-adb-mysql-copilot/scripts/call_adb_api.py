@@ -5,14 +5,19 @@
 #     "alibabacloud-adb20211201>=3.7.0",
 #     "alibabacloud-tea-openapi>=0.3.0",
 #     "alibabacloud-tea-util>=0.3.0",
+#     "pymysql>=1.1.1",
 # ]
 # ///
 # -*- coding: utf-8 -*-
 """Alibaba Cloud ADB MySQL API command-line tool.
 
-A self-contained script that calls ADB MySQL OpenAPI endpoints directly.
-Designed for use with Claude Code skills — can be run via `uv run` with
-zero installation.
+A self-contained script that calls ADB MySQL OpenAPI endpoints and
+executes SQL directly. Designed for use with Claude Code skills — can
+be run via `uv run` with zero installation.
+
+Supports two connection modes for SQL:
+  - Direct mode: set ADB_MYSQL_HOST/PORT/USER/PASSWORD/DATABASE env vars.
+  - OpenAPI mode: set ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET for API calls.
 """
 
 import argparse
@@ -23,13 +28,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 try:
+    import pymysql
     from alibabacloud_adb20211201.client import Client as AdbClient
     from alibabacloud_adb20211201 import models as adb_models
     from alibabacloud_tea_openapi import models as open_api_models
 except ImportError as e:
     print(
         "Error: missing required packages. "
-        "Install with: pip install alibabacloud-adb20211201 alibabacloud-tea-openapi",
+        "Install with: pip install alibabacloud-adb20211201 alibabacloud-tea-openapi pymysql",
         file=sys.stderr,
     )
     print(f"Details: {e}", file=sys.stderr)
@@ -132,6 +138,7 @@ class AdbApiClient:
         """List all ADB MySQL clusters in the configured region."""
         request = adb_models.DescribeDBClustersRequest(
             region_id=self.region_id, page_number=1, page_size=100,
+            dbcluster_version="All",
         )
         response = self.client.describe_dbclusters(request)
         return response.body.to_map()
@@ -170,10 +177,19 @@ class AdbApiClient:
     def describe_diagnosis_records(
             self, cluster_id: str,
             start_time: Optional[str] = None, end_time: Optional[str] = None,
+            query_condition: Optional[str] = None,
             database: Optional[str] = None, keyword: Optional[str] = None,
+            order: Optional[str] = None,
             page_number: int = 1, page_size: int = 30, lang: str = "zh",
     ) -> dict:
-        """Query SQL diagnosis summary records within a time range."""
+        """Query SQL diagnosis summary records within a time range.
+
+        query_condition supports JSON filters such as:
+          - {"Type":"status","Value":"running"}  — running queries
+          - {"Type":"status","Value":"finished"} — finished queries
+          - {"Type":"maxCost","Value":"100"}      — top 100 by cost
+          - {"Type":"cost","Min":"10","Max":"200"} — cost range (ms)
+        """
         start_dt, end_dt = _resolve_time_range(start_time, end_time)
         request = adb_models.DescribeDiagnosisRecordsRequest(
             dbcluster_id=cluster_id,
@@ -183,7 +199,8 @@ class AdbApiClient:
             page_size=page_size,
             lang=lang,
         )
-        _set_optional(request, database=database, keyword=keyword)
+        _set_optional(request, query_condition=query_condition,
+                      database=database, keyword=keyword, order=order)
         response = self.client.describe_diagnosis_records(request)
         return response.body.to_map()
 
@@ -339,6 +356,70 @@ class AdbApiClient:
 
 
 # ---------------------------------------------------------------------------
+# SQL execution (direct connection via pymysql)
+# ---------------------------------------------------------------------------
+
+DB_CONNECT_TIMEOUT = int(os.getenv("ADB_MYSQL_CONNECT_TIMEOUT", "2"))
+
+
+def _get_db_config() -> dict:
+    """Read database connection config from environment variables.
+
+    Returns a dict with host/port/user/password/database, or empty dict
+    if user/password are not configured.
+    """
+    user = os.getenv("ADB_MYSQL_USER")
+    password = os.getenv("ADB_MYSQL_PASSWORD")
+    if not user or not password:
+        return {}
+    return {
+        "host": os.getenv("ADB_MYSQL_HOST", "localhost"),
+        "port": int(os.getenv("ADB_MYSQL_PORT", "3306")),
+        "user": user,
+        "password": password,
+        "database": os.getenv("ADB_MYSQL_DATABASE"),
+    }
+
+
+def execute_sql(query: str, database: Optional[str] = None) -> str:
+    """Execute a SQL query via direct pymysql connection.
+
+    Requires ADB_MYSQL_HOST/PORT/USER/PASSWORD env vars to be set.
+    Returns JSON array of row dicts for queries, or {"affected_rows": N}
+    for non-query statements.
+    """
+    cfg = _get_db_config()
+    if not cfg:
+        raise ValueError(
+            "Database credentials not configured. Set environment variables:\n"
+            "  ADB_MYSQL_HOST, ADB_MYSQL_PORT, ADB_MYSQL_USER, ADB_MYSQL_PASSWORD"
+        )
+    if database:
+        cfg["database"] = database
+
+    conn = pymysql.connect(
+        **cfg,
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        autocommit=True,
+        connect_timeout=DB_CONNECT_TIMEOUT,
+    )
+    try:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(query)
+            columns = [desc[0] for desc in cursor.description] if cursor.description else []
+            rows = cursor.fetchall()
+            if not columns:
+                return json.dumps({"affected_rows": cursor.rowcount}, ensure_ascii=False)
+            return json.dumps(rows, ensure_ascii=False, default=str)
+        finally:
+            cursor.close()
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # CLI helpers
 # ---------------------------------------------------------------------------
 
@@ -436,7 +517,9 @@ def cmd_describe_diagnosis_records(args: argparse.Namespace) -> None:
     _output(client.describe_diagnosis_records(
         args.cluster_id,
         start_time=args.start_time, end_time=args.end_time,
+        query_condition=args.query_condition,
         database=args.database, keyword=args.keyword,
+        order=args.order,
         page_number=args.page_number, page_size=args.page_size,
         lang=args.lang,
     ))
@@ -531,6 +614,20 @@ def cmd_describe_inclined_tables(args: argparse.Namespace) -> None:
     ))
 
 
+def cmd_execute_sql(args: argparse.Namespace) -> None:
+    _log(f"[SQL] {args.query[:80]}{'...' if len(args.query) > 80 else ''}")
+    result = execute_sql(args.query, database=args.database)
+    print(result)
+
+
+def cmd_get_current_utc_time(args: argparse.Namespace) -> None:
+    now = datetime.now(timezone.utc)
+    _output({
+        "utc_now": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "utc_now_short": now.strftime("%Y-%m-%dT%H:%MZ"),
+    })
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -551,6 +648,7 @@ Examples:
   uv run ./scripts/call_adb_api.py describe_table_statistics --cluster-id amv-xxx
   uv run ./scripts/call_adb_api.py describe_available_advices --cluster-id amv-xxx --advice-type INDEX
   uv run ./scripts/call_adb_api.py describe_inclined_tables --cluster-id amv-xxx
+  uv run ./scripts/call_adb_api.py execute_sql --query "SELECT 1"
         """,
     )
     subparsers = parser.add_subparsers(dest="command", help="API command to execute")
@@ -585,8 +683,14 @@ Examples:
     p = subparsers.add_parser("describe_diagnosis_records", help="Query SQL diagnosis records")
     _add_cluster_args(p)
     _add_time_args(p)
+    p.add_argument(
+        "--query-condition",
+        help='JSON filter, e.g. \'{"Type":"status","Value":"running"}\' '
+             'or \'{"Type":"maxCost","Value":"100"}\'',
+    )
     p.add_argument("--database", help="Database name filter")
     p.add_argument("--keyword", help="SQL keyword filter")
+    _add_order_arg(p)
     _add_page_args(p)
     _add_lang_arg(p)
     p.set_defaults(func=cmd_describe_diagnosis_records)
@@ -660,6 +764,16 @@ Examples:
     _add_page_args(p)
     _add_lang_arg(p)
     p.set_defaults(func=cmd_describe_inclined_tables)
+
+    # execute_sql (direct DB connection, requires ADB_MYSQL_* env vars)
+    p = subparsers.add_parser("execute_sql", help="Execute SQL via direct database connection")
+    p.add_argument("--query", required=True, help="SQL statement to execute")
+    p.add_argument("--database", help="Target database name (overrides ADB_MYSQL_DATABASE)")
+    p.set_defaults(func=cmd_execute_sql)
+
+    # get_current_utc_time (no credentials required)
+    p = subparsers.add_parser("get_current_utc_time", help="Print current UTC time for time range calculations")
+    p.set_defaults(func=cmd_get_current_utc_time)
 
     # Parse and dispatch
     args = parser.parse_args()
