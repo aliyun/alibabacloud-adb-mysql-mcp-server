@@ -81,7 +81,7 @@ claude
 ```
 
 ```bash
-/alibabacloud-adb-mysql-copilot How many ADB MySQL clusters do I have in cn-hangzhou?
+/alibabacloud-adb-mysql-copilot How many clusters do I have in cn-zhangjiakou?
 ```
 
 ## 四、Usage Examples
@@ -92,24 +92,28 @@ After mounting the skill, you can describe your intent directly in a Claude Code
 
 Find the list of clusters in a specified region.
 ```text
-You: Which ADB MySQL clusters are in the cn-hangzhou region?
+You: /alibabacloud-adb-mysql-copilot Which ADB MySQL clusters are in the cn-hangzhou region?
 Claude: [Invokes ADB MySQL Copilot and returns the result]
 ```
+
+![cluster-info](../assets/cluster-info.jpg)
 
 ### 4.2 Slow query diagnosis
 
 Run a **slow query diagnosis** on a specified cluster for a given time range.
 ```text
-You: Run a slow query diagnosis on cluster amv-xxx in cn-zhangjiakou for the last 2 hours.
+You: /alibabacloud-adb-mysql-copilot Run a slow query diagnosis on cluster amv-xxx in cn-zhangjiakou for the last 2 hours.
 Claude: [Invokes slow query diagnosis, returns BadSQL list and optimization suggestions]
 ```
+
+![slow-query-diagnosis](../assets/slow-query-diagnosis.jpg)
 
 ### 4.3 Cluster space diagnosis
 
 Run a **full space inspection** on a specified cluster (executes in parallel: oversized non-partition tables, partition validity, primary key validity, table skew, dimension table validity, idle indexes, and hot/cold tiering — 7 checks total), then produces a consolidated health report.
 
 ```text
-You: Run a space diagnosis on cluster amv-xxx in cn-zhangjiakou.
+You: /alibabacloud-adb-mysql-copilot Run a space diagnosis on cluster amv-xxx in cn-zhangjiakou.
 Claude: [Invokes space diagnosis, runs multiple checks in parallel, and returns a health report]
 ```
 
@@ -118,7 +122,7 @@ Claude: [Invokes space diagnosis, runs multiple checks in parallel, and returns 
 Detect fact tables with data skew (which can cause resource imbalance and long-tail queries).
 
 ```text
-You: Does cluster amv-xxx have any table data skew? Check the fact table skew.
+You: /alibabacloud-adb-mysql-copilot Does cluster amv-xxx have any table data skew? Check the fact table skew.
 Claude: [Invokes table skew diagnosis, returns skewed fact tables and skew details]
 ```
 
@@ -127,7 +131,7 @@ Claude: [Invokes table skew diagnosis, returns skewed fact tables and skew detai
 Detect tables with poorly designed partition keys (partitions too large or too small can impact Build and query performance).
 
 ```text
-You: Run a partition validity diagnosis on amv-xxx to check for poorly partitioned tables.
+You: /alibabacloud-adb-mysql-copilot Run a partition validity diagnosis on amv-xxx to check for poorly partitioned tables.
 Claude: [Invokes partition diagnosis, returns tables with invalid partitions and their physical size]
 ```
 
@@ -136,7 +140,7 @@ Claude: [Invokes partition diagnosis, returns tables with invalid partitions and
 Detect tables that are not partitioned yet have grown excessively large (prone to full-table Build, disk and performance issues).
 
 ```text
-You: Check if amv-xxx has any oversized non-partition tables.
+You: /alibabacloud-adb-mysql-copilot Check if amv-xxx has any oversized non-partition tables.
 Claude: [Invokes oversized non-partition table diagnosis, returns table names, physical size and row counts]
 ```
 
@@ -145,7 +149,7 @@ Claude: [Invokes oversized non-partition table diagnosis, returns table names, p
 Detect dimension (broadcast) tables with excessive row counts (broadcast writes amplify write pressure for large tables).
 
 ```text
-You: Run a dimension table validity diagnosis on amv-xxx.
+You: /alibabacloud-adb-mysql-copilot Run a dimension table validity diagnosis on amv-xxx.
 Claude: [Invokes dimension table diagnosis, returns invalid dimension tables with size and row counts]
 ```
 
@@ -154,7 +158,7 @@ Claude: [Invokes dimension table diagnosis, returns invalid dimension tables wit
 View idle or redundant indexes that can be dropped or optimized.
 
 ```text
-You: Does amv-xxx have any idle index optimization advices? Looking to save storage and write cost.
+You: /alibabacloud-adb-mysql-copilot Does amv-xxx have any idle index optimization advices? Looking to save storage and write cost.
 Claude: [Invokes idle index advice, returns optimizable indexes with suggestions and expected savings]
 ```
 
@@ -163,7 +167,7 @@ Claude: [Invokes idle index advice, returns optimizable indexes with suggestions
 View tables suitable for hot-to-cold tiering to reduce costs.
 
 ```text
-You: What hot/cold tiering advices are there for amv-xxx? Which tables can be moved to cold storage?
+You: /alibabacloud-adb-mysql-copilot What hot/cold tiering advices are there for amv-xxx? Which tables can be moved to cold storage?
 Claude: [Invokes hot/cold tiering advice, returns tables eligible for cold storage with suggestions and expected savings]
 ```
 
@@ -172,12 +176,13 @@ Claude: [Invokes hot/cold tiering advice, returns tables eligible for cold stora
 To execute SQL against a specific cluster, configure these environment variables: `ADB_MYSQL_HOST/ADB_MYSQL_PORT/ADB_MYSQL_USER/ADB_MYSQL_PASSWORD/ADB_MYSQL_DATABASE`.
 
 ```text
-You: What is the current hot/cold table conversion progress on amv-xxx?
+You: /alibabacloud-adb-mysql-copilot What is the current hot/cold table conversion progress on amv-xxx?
 Claude: [Queries system tables for hot/cold table conversion progress]
 
-You: Show the common config parameter values for amv-xxx.
+You: /alibabacloud-adb-mysql-copilot Show the common config parameter values for amv-xxx.
 Claude: [Queries system tables for common config parameter values]
 ```
+![sql-inspection](../assets/sql-inspection.jpg)
 
 ## 五、Troubleshooting
 
