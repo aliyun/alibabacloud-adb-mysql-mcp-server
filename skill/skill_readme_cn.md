@@ -84,38 +84,99 @@ claude
 /alibabacloud-adb-mysql-copilot 我在杭州有多少 ADB MySQL 实例？
 ```
 
-或直接验证脚本：
-
-```bash
-uv run ~/.claude/skills/alibabacloud-adb-mysql-copilot/scripts/call_adb_api.py \
-    describe_db_clusters --region cn-hangzhou
-```
-
 ## 四、使用示例
 
-```bash
-# 查询集群列表
-uv run ./scripts/call_adb_api.py describe_db_clusters --region cn-hangzhou
+以下示例中，将技能挂载后可直接在 Claude Code 对话中说出「你」中的内容，Claude 会按场景调用对应诊断并返回结果。
 
-# 查看集群详情
-uv run ./scripts/call_adb_api.py describe_db_cluster_attribute --cluster-id amv-xxx
+### 4.1 实例查找
 
-# 查询 CPU 性能（默认最近 1 小时）
-uv run ./scripts/call_adb_api.py describe_db_cluster_performance \
-    --cluster-id amv-xxx --key AnalyticDB_CPU
+查找指定区域下的实例列表。
+```text
+你：查询杭州地域有哪些 ADBMySQL 实例？
+Claude：[调用 ADBMySQL Copilot 并返回结果]
+```
 
-# 检测 Bad SQL
-uv run ./scripts/call_adb_api.py describe_bad_sql_detection --cluster-id amv-xxx
+### 4.2 实例慢查询诊断
 
-# 查看运行中的 SQL
-uv run ./scripts/call_adb_api.py describe_diagnosis_records --cluster-id amv-xxx \
-    --query-condition '{"Type":"status","Value":"running"}'
+对指定实例执行指定时间的**慢查询诊断**。
+```text
+你：针对张家口的实例amv-xxx，帮我做一下慢查询诊断，时间是最近2小时
+Claude：[调用实例慢查询诊断逻辑，返回BadSQL和优化建议]
+```
 
-# SQL Pattern 分析
-uv run ./scripts/call_adb_api.py describe_sql_patterns --cluster-id amv-xxx
+### 4.3 实例空间诊断
 
-# 执行诊断 SQL（需配置 ADB_MYSQL_* 环境变量）
-uv run ./scripts/call_adb_api.py execute_sql --query "SHOW PROCESSLIST"
+对指定实例执行**完整空间巡检**（并行执行：过大非分区表、分区合理性、主键合理性、表数据倾斜、复制表合理性、空闲索引、冷热表共 7 项诊断），并汇总为一份健康巡检报告。
+
+```text
+你：张家口集群，amv-xxx 实例空间诊断
+Claude：[调用实例空间诊断逻辑，并行执行多项诊断并汇总返回实例健康巡检报告]
+```
+
+### 4.4 表数据倾斜诊断
+
+检测实例下存在数据倾斜的事实表（易导致资源不均衡、长尾查询）。
+
+```text
+你：amv-xxx 这个实例有没有表数据倾斜？帮我查一下事实表倾斜情况
+Claude：[调用表数据倾斜诊断逻辑，返回存在倾斜的事实表及倾斜情况]
+```
+
+### 4.5 分区合理性诊断
+
+检测分区字段设计不合理的表（分区过大或过小会影响 Build 与查询性能）。
+
+```text
+你：amv-xxx 分区合理性诊断，看看有没有分区设计不合理的表
+Claude：[调用分区合理性诊断逻辑，返回分区设计不合理的表及物理容量]
+```
+
+### 4.6 过大非分区表诊断
+
+检测未分区且数据量过大的表（易触发全表 Build、磁盘与性能问题）。
+
+```text
+你：查一下 amv-xxx 里有没有过大的非分区表
+Claude：[调用过大非分区表诊断逻辑，返回异常表名、物理容量与行数]
+```
+
+### 4.7 复制表合理性诊断
+
+检测行数过大的复制表（复制表采用广播写，行数过大会放大写入压力）。
+
+```text
+你：amv-xxx 复制表合理性诊断，有没有不合理的复制表
+Claude：[调用复制表合理性诊断逻辑，返回不合理的复制表及容量、行数]
+```
+
+### 4.8 空闲索引优化建议
+
+查看实例下可删除或优化的空闲/冗余索引建议。
+
+```text
+你：amv-xxx 有没有空闲索引优化建议？想省点存储和写入
+Claude：[调用空闲索引优化建议逻辑，返回可优化索引及建议与预期收益]
+```
+
+### 4.9 冷热表优化建议
+
+查看适合做冷热分层（热表转冷表）的优化建议，以降低成本。
+
+```text
+你：amv-xxx 冷热表优化建议，哪些表可以转冷存储
+Claude：[调用冷热表优化建议逻辑，返回可转冷存储的表及建议与预期收益]
+```
+
+### 4.10 针对指定实例执行SQL
+
+针对具体某个实例，可以配置这些环境变量`ADB_MYSQL_HOST/ADB_MYSQL_PORT/ADB_MYSQL_USER/ADB_MYSQL_PASSWORD/ADB_MYSQL_DATABASE`，来实现针对具体的实例执行SQL。
+
+```text
+你：amv-xxx 当前的冷热表转换进度怎么样了？
+Claude：[调用系统表查询冷热表转换进度]
+
+你：amv-xxx 常见的配置项的值
+Claude：[调用系统表查询常见的配置项的值]
 ```
 
 ## 五、常见问题
