@@ -96,7 +96,7 @@ You: /alibabacloud-adb-mysql-copilot Which ADB MySQL clusters are in the cn-hang
 Claude: [Invokes ADB MySQL Copilot and returns the result]
 ```
 
-![cluster-info](../assets/cluster-info.jpg)
+![cluster-info](../../assets/cluster-info.jpg)
 
 ### 4.2 Slow query diagnosis
 
@@ -106,7 +106,7 @@ You: /alibabacloud-adb-mysql-copilot Run a slow query diagnosis on cluster amv-x
 Claude: [Invokes slow query diagnosis, returns BadSQL list and optimization suggestions]
 ```
 
-![slow-query-diagnosis](../assets/slow-query-diagnosis.jpg)
+![slow-query-diagnosis](../../assets/slow-query-diagnosis.jpg)
 
 ### 4.3 Cluster space diagnosis
 
@@ -117,8 +117,8 @@ You: /alibabacloud-adb-mysql-copilot Run a space diagnosis on cluster amv-xxx in
 Claude: [Invokes space diagnosis, runs multiple checks in parallel, and returns a health report]
 ```
 
-![table-modeling-diagnosis-1](../assets/table-modeling-diagnosis-1.jpg)
-![table-modeling-diagnosis-2](../assets/table-modeling-diagnosis-2.jpg)
+![table-modeling-diagnosis-1](../../assets/table-modeling-diagnosis-1.jpg)
+![table-modeling-diagnosis-2](../../assets/table-modeling-diagnosis-2.jpg)
 
 ### 4.4 Table skew diagnosis
 
@@ -138,7 +138,7 @@ You: /alibabacloud-adb-mysql-copilot Run a partition validity diagnosis on amv-x
 Claude: [Invokes partition diagnosis, returns tables with invalid partitions and their physical size]
 ```
 
-![table-partition-diagnosis](../assets/table-partition-diagnosis.jpg)
+![table-partition-diagnosis](../../assets/table-partition-diagnosis.jpg)
 
 ### 4.6 Oversized non-partition table diagnosis
 
@@ -167,7 +167,7 @@ You: /alibabacloud-adb-mysql-copilot Does amv-xxx have any idle index optimizati
 Claude: [Invokes idle index advice, returns optimizable indexes with suggestions and expected savings]
 ```
 
-![index-advice](../assets/index-advice.jpg)
+![index-advice](../../assets/index-advice.jpg)
 
 ### 4.9 Hot/cold tiering optimization advices
 
@@ -178,7 +178,7 @@ You: /alibabacloud-adb-mysql-copilot What hot/cold tiering advices are there for
 Claude: [Invokes hot/cold tiering advice, returns tables eligible for cold storage with suggestions and expected savings]
 ```
 
-![tiering-advice](../assets/tiering-advice.jpg)
+![tiering-advice](../../assets/tiering-advice.jpg)
 
 ### 4.10 Execute SQL on a specific cluster
 
@@ -191,7 +191,7 @@ Claude: [Queries system tables for hot/cold table conversion progress]
 You: /alibabacloud-adb-mysql-copilot Show the common config parameter values for amv-xxx.
 Claude: [Queries system tables for common config parameter values]
 ```
-![sql-inspection](../assets/sql-inspection.jpg)
+![sql-inspection](../../assets/sql-inspection.jpg)
 
 ## 五、Troubleshooting
 
