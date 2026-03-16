@@ -1,0 +1,41 @@
+{
+  "adb": {
+    "jdbcUrl": "jdbc:mysql://xxxxxxxxxxx.ads.aliyuncs.com:3306/openclaw_adb",
+    "username": "aps",
+    "password": "xxxxxxxxxx",
+    "host": "xxxxxxxxxxx.ads.aliyuncs.com",
+    "port": 3306,
+    "database": "openclaw_adb",
+    "sessionTable": "openclaw_sessions",
+    "logsTable": "openclaw_logs",
+    "connectionPoolSize": 5
+  },
+  "collection": {
+    "intervalMinutes": 5,
+    "batchSize": 100,
+    "retentionDays": 7,
+    "enableLogCollection": true,
+    "enableTokenCollection": true
+  },
+  "filters": {
+    "minLevel": "info",
+    "includeSubsystems": [],
+    "excludeSubsystems": ["verbose", "trace"]
+  },
+  "llm": {
+    "endpoint": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+    "apiKey": "sk-xxxxxxxxxx",
+    "model": "qwen3.5-plus",
+    "apiType": "anthropic",
+    "maxConcurrency": 5,
+    "temperature": 0.1,
+    "maxTokens": 128000
+  },
+  "analysis": {
+    "enableL1": true,
+    "enableL2": true,
+    "enableL3": true,
+    "analysisWindowDays": 7,
+    "maxSessionsForLlm": 500
+  }
+}
