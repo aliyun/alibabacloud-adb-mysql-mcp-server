@@ -1,5 +1,5 @@
 ---
-name: openclaw-insight
+name: alibabacloud-adb-openclaw-insight
 description: >
   OpenClaw conversation log collection and deep insight analysis Skill. Collects OpenClaw
   session logs (JSONL format) in real time and pushes them to Alibaba Cloud AnalyticDB
