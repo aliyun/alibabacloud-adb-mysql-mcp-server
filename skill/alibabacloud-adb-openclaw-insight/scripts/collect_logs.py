@@ -12,7 +12,9 @@ import os
 import re
 import socket
 import sys
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from scripts.config import AppConfig
 from scripts.db import SqlValue, execute_batch_insert, execute_query
@@ -39,6 +41,49 @@ LOG_COLUMNS = [
 
 LEVEL_MAP = {0: "silly", 1: "trace", 2: "debug", 3: "info", 4: "warn", 5: "error", 6: "fatal"}
 
+
+# ─── Timezone Utilities ───
+
+_DEFAULT_TIMEZONE = "Asia/Shanghai"
+
+def _fetch_adb_timezone(config: AppConfig) -> ZoneInfo:
+    """
+    Query ADB for its current timezone setting via SELECT current_timezone().
+    Falls back to Asia/Shanghai (UTC+8) if the query fails or returns an unrecognized zone.
+    """
+    try:
+        rows = execute_query(config.adb, "SELECT current_timezone() AS tz")
+        tz_name = rows[0].get("tz") if rows else None
+        if tz_name and isinstance(tz_name, str):
+            try:
+                zone = ZoneInfo(tz_name)
+                print(f"[Collect] ADB timezone: {tz_name}")
+                return zone
+            except ZoneInfoNotFoundError:
+                print(f"[Collect] Unrecognized ADB timezone '{tz_name}', falling back to {_DEFAULT_TIMEZONE}")
+    except Exception as exc:
+        print(f"[Collect] Failed to query ADB timezone ({exc}), falling back to {_DEFAULT_TIMEZONE}")
+    return ZoneInfo(_DEFAULT_TIMEZONE)
+
+def _convert_iso_timestamp(iso_timestamp: str, target_tz: ZoneInfo) -> str:
+    """
+    Convert an ISO 8601 timestamp string to a MySQL DATETIME(3) string in the target timezone.
+
+    Handles both UTC suffix ("Z") and explicit timezone offsets ("+08:00"):
+      - "2026-03-08T05:13:46.463Z"         → parsed as UTC, then converted to target_tz
+      - "2026-03-11T10:54:24.111+08:00"    → parsed with its own offset, then converted to target_tz
+
+    Python's datetime.fromisoformat() natively supports both forms (Python 3.7+).
+    """
+    try:
+        # Replace trailing "Z" with "+00:00" so fromisoformat() handles it uniformly.
+        normalized = iso_timestamp.rstrip("Z") + ("+00:00" if iso_timestamp.endswith("Z") else "")
+        dt_with_tz = datetime.fromisoformat(normalized)
+        dt_local = dt_with_tz.astimezone(target_tz)
+        return dt_local.strftime("%Y-%m-%d %H:%M:%S.") + f"{dt_local.microsecond // 1000:03d}"
+    except ValueError:
+        # Fallback: strip T and timezone suffix without conversion
+        return iso_timestamp.replace("T", " ").split("+")[0].rstrip("Z")
 
 # ─── State Management ───
 
@@ -209,11 +254,12 @@ def _extract_sender_id(content_text: Optional[str]) -> Optional[str]:
 
 # ─── JSONL Session Parsing ───
 
-def _parse_jsonl_line(line: str, session_id: str) -> Optional[dict]:
+def _parse_jsonl_line(line: str, session_id: str, target_tz: ZoneInfo) -> Optional[dict]:
     """
     Parse a single JSONL line into a session record dict.
 
     session_id is derived from the filename (e.g. c7db805e-....jsonl → c7db805e-...).
+    target_tz is the ADB timezone queried at the start of each collection run.
     All line types are recorded; non-message lines will have empty message fields.
     """
     trimmed = line.strip()
@@ -226,9 +272,14 @@ def _parse_jsonl_line(line: str, session_id: str) -> Optional[dict]:
         return None
 
     record_type = parsed.get("type")
+    # Use only the top-level "timestamp" (ISO 8601 string, e.g. "2026-03-08T05:13:46.463Z").
+    # The nested message.timestamp is a Unix millisecond integer and must NOT be used.
     timestamp = parsed.get("timestamp")
-    if not record_type or not timestamp:
+    if not record_type or not isinstance(timestamp, str) or not timestamp:
         return None
+
+    # Convert ISO 8601 UTC → MySQL DATETIME(3) in the ADB's current timezone.
+    timestamp = _convert_iso_timestamp(timestamp, target_tz)
 
     # For message lines, parse the nested message object into wide-table fields.
     # For all other line types (model_change, thinking_level_change, custom, etc.),
@@ -284,6 +335,10 @@ async def collect_sessions(config: AppConfig) -> int:
     """Collect session data from JSONL files under the OpenClaw agents directory."""
     print("[Collect:Session] Scanning OpenClaw session files...")
 
+    # Query ADB for its current timezone at the start of each run so that
+    # timestamp conversion always matches the database's actual timezone setting.
+    target_tz = _fetch_adb_timezone(config)
+
     session_files = _find_session_files()
     print(f"[Collect:Session] Found {len(session_files)} session files")
 
@@ -317,7 +372,7 @@ async def collect_sessions(config: AppConfig) -> int:
 
         for line_index in range(start_line, len(lines)):
             raw_line = lines[line_index]
-            record = _parse_jsonl_line(raw_line, session_id)
+            record = _parse_jsonl_line(raw_line, session_id, target_tz)
             if not record:
                 continue
             if _should_filter(record, config):
@@ -451,8 +506,12 @@ def _extract_subsystem(parsed: dict, meta: dict) -> Optional[str]:
     return None
 
 
-def _parse_log_line(line: str) -> Optional[dict]:
-    """Parse a single log line from the daily log file."""
+def _parse_log_line(line: str, target_tz: ZoneInfo) -> Optional[dict]:
+    """
+    Parse a single log line from the daily log file.
+    target_tz is the ADB timezone queried at the start of each collection run,
+    used to convert the ISO 8601 timestamp to a MySQL DATETIME(3) string.
+    """
     trimmed = line.strip()
     if not trimmed:
         return None
@@ -466,9 +525,13 @@ def _parse_log_line(line: str) -> Optional[dict]:
     if not isinstance(meta, dict):
         meta = {}
 
-    timestamp = _extract_timestamp(parsed, meta)
-    if not timestamp:
+    raw_timestamp = _extract_timestamp(parsed, meta)
+    if not raw_timestamp:
         return None
+
+    # Convert ISO 8601 timestamp (with or without timezone offset) to MySQL DATETIME(3)
+    # in the ADB's current timezone. Log timestamps look like "2026-03-11T10:54:24.111+08:00".
+    timestamp = _convert_iso_timestamp(raw_timestamp, target_tz)
 
     level = _extract_log_level(parsed, meta)
     meta_parent_names = meta.get("parentNames")
@@ -497,6 +560,10 @@ def _parse_log_line(line: str) -> Optional[dict]:
 async def collect_log_files(config: AppConfig) -> int:
     """Collect log data from /tmp/openclaw/openclaw-YYYY-MM-DD.log files."""
     print(f"[Collect:Log] Scanning log files in {LOG_DIRECTORY}...")
+
+    # Query ADB for its current timezone at the start of each run so that
+    # timestamp conversion always matches the database's actual timezone setting.
+    target_tz = _fetch_adb_timezone(config)
 
     log_files = _find_log_files()
     print(f"[Collect:Log] Found {len(log_files)} log files")
@@ -528,7 +595,7 @@ async def collect_log_files(config: AppConfig) -> int:
 
         for line_index in range(start_line, len(lines)):
             raw_line = lines[line_index]
-            log_record = _parse_log_line(raw_line)
+            log_record = _parse_log_line(raw_line, target_tz)
             if not log_record:
                 continue
 

@@ -41,23 +41,41 @@ cp config.example.json config.json
 # 4. Initialize the database tables
 uv run python -m scripts.init_db
 
-# 5. Start the service (collection + scheduled analysis)
+# 5. (Optional) Start the all-in-one service (collection + scheduled analysis)
 uv run python -m scripts.main
 ```
 
 ## CLI Commands
 
-| Command | Usage | Description |
-|---------|-------|-------------|
-| `collect` | `python -m scripts.main collect` | One-shot collection: collect all new data, save file offsets, then exit. Safe to call repeatedly from any scheduler. |
-| `analyze` | `python -m scripts.main analyze` | Run full analysis (L1 → L2 → L3 → Final Report) |
-| `final-report` | `python -m scripts.main final-report` | Fetch and print the latest final narrative report from DB |
+### Collect — One-shot data collection
 
-Run analysis manually with a custom time range:
+Scans new session JSONL files and daily log files, inserts records into ADB, saves the file-offset checkpoint, then exits. Safe to call repeatedly.
 
 ```bash
-# Time format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS (e.g. "2026-03-13 02:04:09")
+uv run python -m scripts.main collect
+```
+
+### Analyze — Run full insight analysis
+
+Runs the full three-layer analysis pipeline (L1 Operational → L2 Behavior → L3 Organizational → Final Report) over the configured time window.
+
+```bash
+uv run python -m scripts.main analyze
+```
+
+Run with a custom time range:
+
+```bash
+# Time format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS
 uv run python -m scripts.analyze_usage --from "2026-03-01 00:00:00" --to "2026-03-10 23:59:59"
+```
+
+### Final Report — Print the latest report
+
+Fetches and prints the most recent narrative report stored in ADB.
+
+```bash
+uv run python -m scripts.main final-report
 ```
 
 ## Scheduled Collection via OpenClaw Cron

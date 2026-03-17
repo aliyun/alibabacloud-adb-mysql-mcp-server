@@ -119,28 +119,22 @@ async def init_database() -> None:
     create_analysis_result_table_sql = """
         CREATE TABLE IF NOT EXISTS `openclaw_analysis_results` (
             row_id BIGINT NOT NULL AUTO_INCREMENT,
-            analysis_date DATE NOT NULL,
-            analysis_type VARCHAR(50) NOT NULL,
-            sender_id VARCHAR(255),
-            session_count INT DEFAULT 0,
-            message_count INT DEFAULT 0,
-            total_input_chars BIGINT DEFAULT 0,
-            total_output_chars BIGINT DEFAULT 0,
-            estimated_input_tokens BIGINT DEFAULT 0,
-            estimated_output_tokens BIGINT DEFAULT 0,
-            estimated_cost_usd DECIMAL(12, 6) DEFAULT 0,
-            business_session_count INT DEFAULT 0,
-            personal_session_count INT DEFAULT 0,
-            unknown_session_count INT DEFAULT 0,
-            details LONGTEXT,
+            run_id VARCHAR(36) NOT NULL COMMENT 'Unique ID for each analysis run (UUID)',
+            case_name VARCHAR(100) NOT NULL COMMENT 'Analysis case name, e.g. L2-1, L2-2, ...',
+            analysis_type VARCHAR(50) NOT NULL COMMENT 'L1_OPERATIONAL / L2_BEHAVIOR / L3_ORGANIZATIONAL',
+            status VARCHAR(20) NOT NULL DEFAULT 'success' COMMENT 'success / failure / skipped',
+            elapsed_seconds DOUBLE DEFAULT NULL COMMENT 'Execution time in seconds',
+            time_range_start VARCHAR(30) DEFAULT NULL COMMENT 'Analysis window start timestamp',
+            time_range_end VARCHAR(30) DEFAULT NULL COMMENT 'Analysis window end timestamp',
+            summary TEXT DEFAULT NULL COMMENT 'Human-readable summary of the result',
+            details LONGTEXT NOT NULL COMMENT 'Full analysis result JSON',
+            error_message TEXT DEFAULT NULL COMMENT 'Error message if status is failure',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (row_id, analysis_date),
-            INDEX idx_analysis_date (analysis_date),
-            INDEX idx_analysis_type (analysis_type),
-            INDEX idx_sender_id (sender_id)
+            PRIMARY KEY (row_id),
+            INDEX idx_run_id (run_id),
+            INDEX idx_case_name (case_name),
+            INDEX idx_analysis_type (analysis_type)
         )
-        DISTRIBUTED BY HASH(row_id)
-        PARTITION BY VALUE(DATE_FORMAT(analysis_date, '%Y%m%d'))
     """
 
     try:
