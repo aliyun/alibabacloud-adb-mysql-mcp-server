@@ -1,6 +1,6 @@
-# ADB MySQL OpenClaw Insight - Claude Code Skill
+# ADB MySQL OpenClaw Insight - OpenClaw Skill
 
-A skill for collecting [OpenClaw](https://openclaw.io) session logs in real time and pushing them to Alibaba Cloud [AnalyticDB for MySQL (ADB MySQL)](https://www.alibabacloud.com/zh/product/analyticdb-for-mysql) for storage and deep analysis. Provides a three-layer insight architecture powered by **SQL + Python + LLM** to help teams understand AI usage patterns, control costs, and extract organizational intelligence.
+A skill for collecting [OpenClaw](https://openclaw.io) session logs in real time and pushing them to Alibaba Cloud [AnalyticDB for MySQL (ADB MySQL)](https://adb.console.aliyun.com/adb/cn-hangzhou/summary) for storage and deep analysis. Provides a three-layer insight architecture powered by **SQL + Python + LLM** to help teams understand AI usage patterns, control costs, and extract organizational intelligence.
 
 ## 一、Features
 

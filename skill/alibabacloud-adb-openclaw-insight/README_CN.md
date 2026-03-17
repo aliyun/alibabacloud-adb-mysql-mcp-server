@@ -1,6 +1,6 @@
-# ADB MySQL OpenClaw Insight - Claude Code Skill
+# ADB MySQL OpenClaw Insight - OpenClaw Skill
 
-实时采集 [OpenClaw](https://openclaw.io) 会话日志并推送至阿里云 [AnalyticDB MySQL（ADB MySQL）](https://www.alibabacloud.com/zh/product/analyticdb-for-mysql) 进行存储与深度分析。提供由 **SQL + Python + LLM** 驱动的三层洞察架构，帮助团队理解 AI 使用模式、控制成本并提炼组织智慧。
+实时采集 [OpenClaw](https://openclaw.io) 会话日志并推送至阿里云 [AnalyticDB MySQL（ADB MySQL）](https://adb.console.aliyun.com/adb/cn-hangzhou/summary) 进行存储与深度分析。提供由 **SQL + Python + LLM** 驱动的三层洞察架构，帮助团队理解 AI 使用模式、控制成本并提炼组织智慧。
 
 ## 一、功能特性
 
