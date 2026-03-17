@@ -22,7 +22,6 @@ from scripts.db import execute_batch_insert, execute_query
 from scripts.llm_client import LlmClient
 from scripts.types import TimeRange, last_n_days_range
 from scripts.analysis.operational_insight import (
-    run_l1_analysis,
     analyze_token_efficiency,
     analyze_session_depth,
     analyze_tool_chains,

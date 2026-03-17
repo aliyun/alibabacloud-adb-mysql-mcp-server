@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 from scripts.config import AdbConfig
-from scripts.db import execute_query, execute_query_async
+from scripts.db import execute_query_async
 from scripts.llm_client import LlmClient
 from scripts.types import TimeRange, time_range_to_sql_params
 

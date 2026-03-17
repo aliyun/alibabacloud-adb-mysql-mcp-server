@@ -5,12 +5,10 @@ Focuses on organizational-level insights, knowledge gaps, best practices, and sk
 
 from __future__ import annotations
 
-import asyncio
 import json
-from typing import Any
 
 from scripts.config import AdbConfig
-from scripts.db import execute_query, execute_query_async
+from scripts.db import execute_query_async
 from scripts.llm_client import LlmClient
 from scripts.types import TimeRange, time_range_to_sql_params
 from scripts.analysis.behavior_insight import _extract_user_message
