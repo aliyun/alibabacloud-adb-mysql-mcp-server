@@ -28,24 +28,21 @@ Collect OpenClaw session logs in real time and push them to AnalyticDB MySQL. An
 ## Quick Start
 
 ```bash
-# 1. Navigate to the Skill directory
-cd openclaw-insight
+# 1. Install uv package manager
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 2. Install dependencies
-pip install -r requirements.txt
-# If "pip" is not found, try: pip3 install -r requirements.txt
+uv pip install -r requirements.txt
 
-# 3. Copy and edit the configuration file
+# 3. Copy the configuration template
 cp config.example.json config.json
 # Edit config.json: fill in ADB connection details and (optionally) LLM API config
 
 # 4. Initialize the database tables
-python -m scripts.init_db
-# If "python" is not found, try: python3 -m scripts.init_db
+uv run python -m scripts.init_db
 
 # 5. Start the service (collection + scheduled analysis)
-python -m scripts.main
-# If "python" is not found, try: python3 -m scripts.main
+uv run python -m scripts.main
 ```
 
 ## CLI Commands
@@ -60,20 +57,20 @@ Run analysis manually with a custom time range:
 
 ```bash
 # Time format: YYYY-MM-DD or YYYY-MM-DD HH:MM:SS (e.g. "2026-03-13 02:04:09")
-python -m scripts.analyze_usage --from "2026-03-01 00:00:00" --to "2026-03-10 23:59:59"
+uv run python -m scripts.analyze_usage --from "2026-03-01 00:00:00" --to "2026-03-10 23:59:59"
 ```
 
 ## Scheduled Collection via OpenClaw Cron
 
 `python -m scripts.main collect` is the recommended way to keep data flowing into ADB. It runs a single collection pass, saves the file-offset checkpoint, and exits — making it safe to call repeatedly from any scheduler.
 
-Register it as an OpenClaw cron job (example: every 5 minutes):
+Register it as an OpenClaw cron job (example: every 30 seconds):
 
 ```json
 {
-  "cron": "*/5 * * * *",
+  "cron": "*/30 * * * * *",
   "command": "python -m scripts.main collect",
-  "cwd": "/path/to/openclaw-insight"
+  "cwd": "/path/to/alibabacloud-adb-mysql-mcp-server/skill/alibabacloud-adb-openclaw-insight"
 }
 ```
 
