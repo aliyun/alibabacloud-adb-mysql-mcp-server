@@ -547,7 +547,7 @@ def _parse_log_line(line: str, target_tz: ZoneInfo) -> Optional[dict]:
         "hostname": _as_str_or_none(parsed.get("hostname") or meta.get("hostname")) or socket.gethostname(),
         "meta_name": _as_str_or_none(meta.get("name")),
         "meta_parent_names": json.dumps(meta_parent_names) if meta_parent_names is not None else None,
-        "meta_date": _as_str_or_none(meta.get("date")),
+        "meta_date": _convert_iso_timestamp(meta["date"], target_tz) if isinstance(meta.get("date"), str) and meta["date"] else None,
         "meta_log_level_id": meta.get("logLevelId") if isinstance(meta.get("logLevelId"), int) else None,
         "meta_log_level_name": _as_str_or_none(meta.get("logLevelName")),
         "meta_path": (
