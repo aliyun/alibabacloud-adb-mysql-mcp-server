@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/aliyun-alibabacloud-adb-mysql-mcp-server-badge.png)](https://mseep.ai/app/aliyun-alibabacloud-adb-mysql-mcp-server)
+
 # AnalyticDB for MySQL MCP Server
 
 English | [中文](README_zh.md)
