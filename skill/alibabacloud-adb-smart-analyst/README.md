@@ -1,6 +1,6 @@
 # ADB Smart Analyst - Quick Start Guide
 
-## 🚀 Configure Database Connection
+## Configure Database Connection
 
 Database connection is managed via **environment variables**, effective only in the current shell session and never written to files.
 
@@ -11,174 +11,243 @@ For first-time use, simply ask the AI:
 The AI will automatically detect whether the environment variables are set. If not, it will guide you to run the following in your terminal:
 
 ```bash
-export ADB_MYSQL_HOST=<your database address, e.g. amv-xxx.ads.aliyuncs.com>
+export ADB_MYSQL_HOST=<your ADB MySQL Proxy address, e.g. amv-xxx.ads.aliyuncs.com>
+export ADB_MYSQL_PORT=3306
+export ADB_MYSQL_DATABASE=<default database>
 export ADB_MYSQL_USER=<your username>
 export ADB_MYSQL_PASSWORD=<your password>
-export ADB_MYSQL_PORT=3306
 ```
 
 After running the commands, inform the AI and it will continue processing your original request.
 
-> ⚠️ **Security Note**: Environment variables are only effective in the current shell session. They are not persisted to disk or committed to Git. You need to re-run the commands when opening a new terminal.
+> **Security Note**: Environment variables are only effective in the current shell session. They are not persisted to disk or committed to Git. You need to re-run the commands when opening a new terminal.
 
----
+### Optional: OpenAPI Mode
 
-## 📋 Complete Workflow Example
+When SQL-based semantic features are unavailable, the skill automatically falls back to OpenAPI mode. This requires:
 
-### Scenario: Query Sales Revenue in Asia for 1995
+- **aliyun CLI** installed with the **adb** plugin
+- **Credentials** configured via `aliyun configure`
+- Environment variable: `ADB_CLUSTER_ID=<your cluster ID, e.g. am-bp1xxxxxxxx>`
+- Optional: `ADB_REGION=<region, e.g. cn-hangzhou>`
 
-```bash
-# Locate the skill directory
-SKILL_DIR="$(find ~ -maxdepth 3 -name 'alibabacloud-adb-smart-analyst' -type d 2>/dev/null | grep -m1 alibabacloud-adb-smart-analyst)"
+Data execution still goes through the SQL connection — OpenAPI is only used for semantic operations.
 
-# Step 1: Semantic Search - Find metric YAML definitions
-uv run --directory "$SKILL_DIR" scripts/adb_smart_analyst.py search_metrics_rag "revenue asia" --attempt 1
-```
-
-Step 1 returns JSON where `data[].definition` is a YAML string. **Key fields**:
-
-| YAML Field | Description | Usage |
-|------------|-------------|-------|
-| `tables[].base_table` | Actual **physical tables** | Pass to Step 2 for validation |
-| `metrics` | Metric calculation formulas | Write into SQL SELECT |
-| `dimensions` | Available dimension columns | Use in GROUP BY / WHERE |
-| `relationships` | Table join conditions | Use in JOIN / WHERE |
+### Dependencies
 
 ```bash
-# Step 2: Physical Alignment - Use physical tables from base_table, NOT semantic view names!
-uv run --directory "$SKILL_DIR" scripts/adb_smart_analyst.py get_batch_table_metadata \
-  '[{"catalog":"adb_catalog","schema":"tpch","table":"lineitem"},{"schema":"tpch","table":"region"}]' \
-  --attempt 1
-
-# Step 3: SQL Execution
-uv run --directory "$SKILL_DIR" scripts/adb_smart_analyst.py execute_adb_sql \
-  "SELECT r.r_name AS region, SUM(l.l_extendedprice) AS revenue FROM adb_catalog.tpch.lineitem l JOIN tpch.region r ON l.l_regionkey = r.r_regionkey WHERE r.r_name = 'ASIA' GROUP BY r.r_name" \
-  --attempt 1
+uv pip install pymysql
+# Optional (only needed for caching_sha2_password or TLS):
+uv pip install cryptography
 ```
 
 ---
 
-## 🔧 Command Reference
+## Architecture
 
-All functions are accessed through the unified entry point `scripts/adb_smart_analyst.py`.
+```
+Mode A (Primary — Full SQL):
+  User → Agent → Skill → PyMySQL → ADB Proxy → MDS / ADB Engine
 
-### search_metrics_rag (Step 1: Semantic Search)
+Mode B (OpenAPI Semantic + SQL Execution):
+  Semantic ops: User → Agent → Skill → aliyun CLI → OpenAPI Gateway → MDS
+  Data execution: User → Agent → Skill → PyMySQL → ADB Proxy → ADB Engine
+```
+
+The skill prefers SQL mode and automatically falls back to OpenAPI when SQL semantic features are unavailable.
+
+---
+
+## Two-Phase Query Flow
+
+### Phase 1 — Intent Anchoring
+
+1. Extract keywords from user's question
+2. Search semantic views: `search_semantic_views --keywords "keyword1 keyword2" --top-k 3`
+3. Decompose question into **target metrics** and **filter conditions**
+4. Map user keywords to semantic objects (dimensions, facts, metrics) in candidate views
+5. Select the best-matching view or ask the user to clarify
+
+### Phase 2 — Deterministic Execution
+
+1. Generate semantic SQL based on the selected view's YAML definition
+2. Execute via `execute_sql` (semantic rewrite enabled by default)
+3. Present: data table, semantic SQL + rewritten SQL, analysis, visualization suggestions
+
+---
+
+## Complete Workflow Example
+
+### Scenario: Query Sales Revenue in Beijing for 2025
 
 ```bash
-uv run --directory "$SKILL_DIR" scripts/adb_smart_analyst.py search_metrics_rag "keyword" [--top-k 5] --attempt N
+# Step 1: Search semantic views
+uv run scripts/adb_analyst.py search_semantic_views --keywords "Beijing sales" --top-k 3
+
+# Step 2: Execute semantic SQL (AGG() wraps metrics, engine maps to actual aggregation)
+uv run scripts/adb_analyst.py execute_sql --sql "SELECT city, order_year, AGG(total_revenue), AGG(order_count) FROM sales_db.SALES_ANALYSIS WHERE city = 'Beijing' AND order_year = 2025 GROUP BY city, order_year LIMIT 100"
+```
+
+---
+
+## Command Reference
+
+All functions are accessed through `scripts/adb_analyst.py`.
+
+### search_semantic_views
+
+Search semantic views by keyword similarity.
+
+```bash
+uv run scripts/adb_analyst.py search_semantic_views --keywords "sales revenue" --top-k 3
 ```
 
 | Parameter | Description |
 |-----------|-------------|
-| `query` | Business keyword (English), e.g. "revenue", "profit margin" (positional argument) |
-| `--top-k` | Number of results to return, default 5 |
-| `--attempt` | Current attempt number (1-3); attempt 3 triggers full fallback |
+| `--keywords` | Space-separated search keywords (required) |
+| `--top-k` | Number of results to return (default: 3) |
 
----
+### get_semantic_view
 
-### get_batch_table_metadata (Step 2: Physical Alignment)
+Retrieve semantic view definitions.
 
 ```bash
-# JSON array format
-uv run --directory "$SKILL_DIR" scripts/adb_smart_analyst.py get_batch_table_metadata \
-  '[{"catalog":"c","schema":"db","table":"t1"},{"schema":"db","table":"t2"}]' \
-  --attempt N
+uv run scripts/adb_analyst.py get_semantic_view --schema sales_db --view-name SALES_ANALYSIS
 ```
 
 | Parameter | Description |
 |-----------|-------------|
-| `tables` | Required, JSON array with catalog (optional) / schema (required) / table (required) |
-| `--attempt` | Current attempt number (1-3) |
+| `--schema` | Filter by schema |
+| `--view-name` | Filter by view name (requires `--schema`) |
 
----
+### execute_sql
 
-### execute_adb_sql (Step 3: SQL Execution)
+Execute SQL queries in semantic mode (default) or direct mode.
 
 ```bash
-uv run --directory "$SKILL_DIR" scripts/adb_smart_analyst.py execute_adb_sql "SELECT ..." --attempt N
+# Semantic mode (default) — SQL hints added automatically
+uv run scripts/adb_analyst.py execute_sql --sql "SELECT city, AGG(revenue) FROM sales_db.VIEW GROUP BY city LIMIT 100"
+
+# Direct mode — skip semantic rewrite, for data exploration
+uv run scripts/adb_analyst.py execute_sql --sql "SELECT * FROM sales_db.orders WHERE dt >= '2026-05-01' LIMIT 10" --no-semantic-rewrite
 ```
 
 | Parameter | Description |
 |-----------|-------------|
-| `sql` | SQL statement (positional argument) |
-| `--attempt` | Current attempt number (1-3) |
+| `--sql` | SQL statement (required) |
+| `--no-semantic-rewrite` | Skip semantic rewrite, use direct mode |
+| `--max-rows` | Max rows to return (default: 500, capped at 100 in direct mode) |
 
----
-
-### create_semantic_view (Create Semantic View)
+### create_semantic_view
 
 ```bash
-uv run --directory "$SKILL_DIR" scripts/adb_smart_analyst.py create_semantic_view "schema.view_name" "yaml_content"
+uv run scripts/adb_analyst.py create_semantic_view --schema logistics --view-name LOGISTICS_ANALYSIS --yaml-file /tmp/view.yaml
 ```
+
+| Parameter | Description |
+|-----------|-------------|
+| `--schema` | Target schema (required) |
+| `--view-name` | View name (required) |
+| `--yaml-file` | Path to YAML definition file, use `-` for stdin (required) |
+| `--or-replace` | Add OR REPLACE clause |
+| `--if-not-exists` | Add IF NOT EXISTS clause |
+
+### alter_semantic_view
+
+```bash
+uv run scripts/adb_analyst.py alter_semantic_view --schema logistics --view-name VIEW --operation rename --new-name NEW_VIEW
+uv run scripts/adb_analyst.py alter_semantic_view --schema logistics --view-name VIEW --operation set_comment --comment "Updated view"
+```
+
+### drop_semantic_view
+
+```bash
+uv run scripts/adb_analyst.py drop_semantic_view --schema logistics --view-name LOGISTICS_ANALYSIS
+```
+
+### list_databases
+
+```bash
+uv run scripts/adb_analyst.py list_databases
+```
+
+### explore_table_metadata
+
+Explore physical table structure, statistics, and sample data.
+
+```bash
+uv run scripts/adb_analyst.py explore_table_metadata --operation <op> --database <db> [--table <tbl>] [options]
+```
+
+| Operation | Description | Requires `--table` |
+|-----------|-------------|-------------------|
+| `list_tables` | List all tables in a database | No |
+| `describe_table` | Show column structure | Yes |
+| `table_statistics` | Row count and data size | Yes |
+| `partition_info` | Partition key and partition stats | Yes |
+| `index_info` | Index information | Yes |
+| `show_create_table` | Show CREATE TABLE DDL | Yes |
+| `safe_sample` | Partition-aware sampling | Yes |
+| `explain` | Show query execution plan | Yes (+ `--sql`) |
 
 ---
 
-## 🎯 How to Trigger the AI to Use This Skill
+## How to Trigger the AI to Use This Skill
 
-### Good Queries (AI will invoke this Skill)
+### Good Queries
 - "Query last month's gross margin by channel"
 - "Show year-over-year GMV growth"
 - "Rank inventory turnover by category"
 - "Analyze order volume trends in East China over the past 30 days"
+- "Create a semantic view for logistics analysis"
+- "What tables are in the logistics database?"
 
-### Less Precise Queries
-- "Help me look up some data" (missing metric and dimension keywords)
-- "What tables are in ADB?" (metadata exploration, not a data query)
-
----
-
-## 📊 3x3 Self-Healing Mechanism
-
-Each stage allows up to 3 attempts. The `--attempt N` parameter is incremented by the Agent:
-
-| Stage | attempt=1 | attempt=2 | attempt=3 | Exceeded |
-|-------|-----------|-----------|-----------|----------|
-| **Step 1** | Original keywords | Split / synonyms | Full fallback triggered | Return error |
-| **Step 2** | Validate physical table columns | Try alternative columns | Fall back to Step 1 re-search | Return error |
-| **Step 3** | Execute SQL | Fix columns / syntax | Reconstruct SQL from YAML | Return error |
+### Degradation to Exploration Mode
+When no semantic view matches, the skill automatically degrades to exploration mode with a four-stage flow: Schema discovery → Table discovery → Structure analysis → Safe sampling & query.
 
 ---
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### Database Connection Failure
 
 ```bash
 # Check if environment variables are set
 echo "ADB_MYSQL_HOST=${ADB_MYSQL_HOST:-(not set)}"
+echo "ADB_MYSQL_USER=${ADB_MYSQL_USER:-(not set)}"
 
 # Re-set environment variables
 export ADB_MYSQL_HOST=<host>
+export ADB_MYSQL_PORT=3306
+export ADB_MYSQL_DATABASE=<database>
 export ADB_MYSQL_USER=<user>
 export ADB_MYSQL_PASSWORD=<password>
-export ADB_MYSQL_PORT=3306
 ```
 
-### Step 1 Returns Empty Results
-
-```sql
--- Directly check which semantic views exist
-SELECT view_name, view_schema FROM information_schema.semantic_views LIMIT 20;
-```
-
-On the 3rd call (`--attempt 3`), a **full fallback** is automatically triggered, returning all semantic view records.
-
-### Step 2 Cannot Find Columns
-
-Ensure you are passing **physical tables** from `base_table`, not semantic view names:
+### Semantic Search Returns No Results
 
 ```bash
-# ✅ Correct: Pass physical table
-'[{"catalog":"adb_catalog","schema":"tpch","table":"lineitem"}]'
+# List available databases
+uv run scripts/adb_analyst.py list_databases
 
-# ❌ Wrong: Pass semantic view name
-'[{"table":"sales_view"}]'
+# Browse all semantic views in a schema
+uv run scripts/adb_analyst.py get_semantic_view --schema sales_db
 ```
+
+If no semantic views match after 3 clarification rounds, the skill degrades to data exploration mode.
+
+### Semantic SQL Errors
+
+- Ensure metrics use `AGG()` wrapper: `AGG(total_revenue)`, not `SUM(total_revenue)`
+- WHERE clauses can only use dimensions or facts, not metrics
+- HAVING clauses can only use metrics
+- Field names must match the `name` field in the YAML definition
+- Always include `LIMIT`
 
 ---
 
-## 📚 Related Documentation
+## Related Documentation
 
-- [SKILL.md](SKILL.md) - Complete Skill specification and workflow
+- [SKILL.md](SKILL.md) - Complete skill specification and workflow
 - [examples.md](examples.md) - Scenario-based usage examples
-- [scripts/adb_smart_analyst.py](scripts/adb_smart_analyst.py) - Core implementation code
+- [scripts/adb_analyst.py](scripts/adb_analyst.py) - Core implementation code
