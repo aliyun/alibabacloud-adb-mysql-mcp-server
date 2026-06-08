@@ -1,1 +1,4 @@
-pymysql>=1.0.2
+pymysql
+# Optional: only required when the MySQL server uses caching_sha2_password / sha256_password
+# auth plugin or TLS/SSL. Default ADB MySQL Proxy uses mysql_native_password and does NOT need it.
+# cryptography
