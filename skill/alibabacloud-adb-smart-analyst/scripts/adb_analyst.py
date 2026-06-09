@@ -15,8 +15,8 @@
     explore_table_metadata  探索表结构、统计信息和样本数据
 
 环境变量:
-    ADB_MYSQL_HOST       ADB MySQL Proxy 主机地址（必填）
-    ADB_MYSQL_PORT       ADB MySQL Proxy 端口（默认: 3306）
+    ADB_MYSQL_HOST       ADB MySQL 集群地址（必填）
+    ADB_MYSQL_PORT       ADB MySQL 端口（默认: 3306）
     ADB_MYSQL_DATABASE   默认数据库（选填）
     ADB_MYSQL_USER       数据库用户名（必填）
     ADB_MYSQL_PASSWORD   数据库密码（必填）

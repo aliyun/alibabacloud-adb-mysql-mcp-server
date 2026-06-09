@@ -47,11 +47,11 @@ uv pip install cryptography
 
 ```
 方式 A（主方式 - 全 SQL）：
-  用户 → Agent → Skill → PyMySQL → ADB Proxy → MDS / ADB Engine
+  用户 → Agent → Skill → PyMySQL → ADB Engine
 
 方式 B（OpenAPI 语义 + SQL 执行）：
-  语义操作：用户 → Agent → Skill → aliyun CLI → OpenAPI Gateway → MDS
-  数据执行：用户 → Agent → Skill → PyMySQL → ADB Proxy → ADB Engine
+  语义操作：用户 → Agent → Skill → aliyun CLI → OpenAPI Gateway → ADB Engine
+  数据执行：用户 → Agent → Skill → PyMySQL → ADB Engine
 ```
 
 Skill 优先使用 SQL 方式，SQL 语义功能不可用时自动切换到 OpenAPI 方式。

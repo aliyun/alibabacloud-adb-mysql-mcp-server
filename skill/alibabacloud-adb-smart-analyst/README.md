@@ -11,7 +11,7 @@ For first-time use, simply ask the AI:
 The AI will automatically detect whether the environment variables are set. If not, it will guide you to run the following in your terminal:
 
 ```bash
-export ADB_MYSQL_HOST=<your ADB MySQL Proxy address, e.g. amv-xxx.ads.aliyuncs.com>
+export ADB_MYSQL_HOST=<your ADB MySQL address, e.g. amv-xxx.ads.aliyuncs.com>
 export ADB_MYSQL_PORT=3306
 export ADB_MYSQL_DATABASE=<default database>
 export ADB_MYSQL_USER=<your username>
@@ -47,11 +47,11 @@ uv pip install cryptography
 
 ```
 Mode A (Primary — Full SQL):
-  User → Agent → Skill → PyMySQL → ADB Proxy → MDS / ADB Engine
+  User → Agent → Skill → PyMySQL → ADB Engine
 
 Mode B (OpenAPI Semantic + SQL Execution):
-  Semantic ops: User → Agent → Skill → aliyun CLI → OpenAPI Gateway → MDS
-  Data execution: User → Agent → Skill → PyMySQL → ADB Proxy → ADB Engine
+  Semantic ops: User → Agent → Skill → aliyun CLI → OpenAPI Gateway → ADB Engine
+  Data execution: User → Agent → Skill → PyMySQL → ADB Engine
 ```
 
 The skill prefers SQL mode and automatically falls back to OpenAPI when SQL semantic features are unavailable.
