@@ -7,6 +7,7 @@
 """
 
 import os
+import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -128,3 +129,36 @@ class TestDBServiceInit:
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ValueError, match="region_id and db_cluster_id are required"):
                 DBService()
+
+    def test_temp_account_is_deleted_when_connect_fails(self, monkeypatch):
+        """临时账号创建后若连接失败，应主动清理账号。"""
+        events = []
+
+        def fake_discover(self):
+            events.append("discover")
+            self._host = "127.0.0.1"
+            self._port = 3306
+
+        def fake_create(self):
+            events.append("create")
+            self._temp_account_name = "mcp_test"
+            self._temp_account_password = "password"
+
+        def fake_connect(self):
+            events.append("connect")
+            raise RuntimeError("connect failed")
+
+        def fake_delete(self):
+            events.append("delete")
+
+        monkeypatch.setattr(DBService, "_discover_connection_address", fake_discover)
+        monkeypatch.setattr(DBService, "_create_temp_account", fake_create)
+        monkeypatch.setattr(DBService, "_connect", fake_connect)
+        monkeypatch.setattr(DBService, "_delete_temp_account", fake_delete)
+
+        with patch.dict(os.environ, {}, clear=True):
+            svc = DBService("cn-hangzhou", "amv-test")
+            with pytest.raises(RuntimeError, match="connect failed"):
+                asyncio.run(svc.__aenter__())
+
+        assert events == ["discover", "create", "connect", "delete"]

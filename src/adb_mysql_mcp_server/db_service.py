@@ -135,15 +135,28 @@ class DBService:
         self._conn: pymysql.Connection | None = None
 
     async def __aenter__(self):
-        if self._use_env:
-            self._host = self._env_host
-            self._port = self._env_port
-        else:
-            await asyncio.to_thread(self._discover_connection_address)
-            await asyncio.to_thread(self._create_temp_account)
+        try:
+            if self._use_env:
+                self._host = self._env_host
+                self._port = self._env_port
+            else:
+                await asyncio.to_thread(self._discover_connection_address)
+                await asyncio.to_thread(self._create_temp_account)
 
-        await asyncio.to_thread(self._connect)
-        return self
+            await asyncio.to_thread(self._connect)
+            return self
+        except Exception:
+            await asyncio.to_thread(self._close)
+            if not self._use_env and self._temp_account_name:
+                try:
+                    await asyncio.to_thread(self._delete_temp_account)
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to delete temporary ADB account %s after connection setup failed: %s",
+                        self._temp_account_name,
+                        cleanup_error,
+                    )
+            raise
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await asyncio.to_thread(self._close)

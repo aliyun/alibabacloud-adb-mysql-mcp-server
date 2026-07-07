@@ -2,10 +2,10 @@
 
 English | [中文](README_zh.md)
 
-AnalyticDB for MySQL MCP Server is a universal interface between AI Agents and [AnalyticDB MySQL](https://www.alibabacloud.com/zh/product/analyticdb-for-mysql). It provides two categories of capabilities:
+AnalyticDB for MySQL MCP Server is a universal interface between AI Agents and [AnalyticDB MySQL](https://www.alibabacloud.com/zh/product/analyticdb-for-mysql). It provides two tool groups:
 
+- **SQL Tools & Resources** (`sql` group): Connect directly to ADB MySQL clusters to execute SQL, view execution plans, and browse database metadata. The `sql` group is only a tool-group switch; `execute_sql` runs in read-only mode by default, and full SQL execution mode requires the additional explicit setting `ENABLE_SQL_WRITE_TOOLS=true`.
 - **OpenAPI Tools** (`openapi` group): Manage clusters, whitelists, accounts, networking, monitoring, diagnostics, and audit logs via Alibaba Cloud OpenAPI.
-- **SQL Tools & Resources** (`sql` group): Connect directly to ADB MySQL clusters to execute SQL, view execution plans, and browse database metadata.
 
 Read-only tools are annotated with `ToolAnnotations(readOnlyHint=True)` per the MCP protocol, allowing clients to distinguish them from mutating operations.
 
@@ -18,6 +18,26 @@ Read-only tools are annotated with `ToolAnnotations(readOnlyHint=True)` per the 
 
 ## 二、Quick Start
 
+### 2.0 Choose a Configuration
+
+Choose the tool groups and extra switches for your scenario before copying a client configuration:
+
+| Scenario | Tool groups | Extra switch | Best for |
+| --- | --- | --- | --- |
+| Read-only SQL queries, EXPLAIN, and metadata browsing | `sql` | None | Recommended default for querying, troubleshooting, and read-only analysis |
+| Full SQL execution through `execute_sql` | `sql` | `ENABLE_SQL_WRITE_TOOLS=true` | INSERT/UPDATE/DELETE/DDL/multi-statement SQL when the MCP client is trusted |
+| OpenAPI cluster management tools + SQL read tools | `openapi,sql` | Alibaba Cloud AK/SK + `ADB_MYSQL_*` direct connection settings | Cluster, account, whitelist, diagnostics, and monitoring operations while keeping SQL read access |
+| OpenAPI + full SQL execution | `openapi,sql` | Alibaba Cloud AK/SK + `ADB_MYSQL_*` direct connection settings + `ENABLE_SQL_WRITE_TOOLS=true` | Administration plus full SQL execution |
+
+> `MCP_TOOLSETS=sql` only enables the SQL tool group. Full SQL execution is not a separate tool group, and there is no `sql_write` tool group. It must be enabled separately with `ENABLE_SQL_WRITE_TOOLS=true`.
+
+Before configuring a client, check:
+
+- Direct database mode: configure `ADB_MYSQL_HOST`, `ADB_MYSQL_PORT`, `ADB_MYSQL_USER`, `ADB_MYSQL_PASSWORD`, and optionally `ADB_MYSQL_DATABASE`.
+- Temporary account mode: if `ADB_MYSQL_USER` / `ADB_MYSQL_PASSWORD` are not configured but AK/SK is available, the server creates a temporary database account through OpenAPI; SQL tool calls must provide `region_id` and `db_cluster_id`.
+- Remote SSE / Streamable HTTP: when `SERVER_HOST` is not a loopback address, configure `API_KEY` on the server and `Authorization: Bearer <API_KEY>` on the client.
+- Full SQL execution: enable it only for trusted users and trusted MCP clients, and use a least-privilege database account.
+
 ### 2.1 Using [cherry-studio](https://github.com/CherryHQ/cherry-studio) (Recommended)
 
 1. Download and install [cherry-studio](https://github.com/CherryHQ/cherry-studio)
@@ -26,7 +46,7 @@ Read-only tools are annotated with `ToolAnnotations(readOnlyHint=True)` per the 
 
 ![cherry-studio configuration](assets/cherry-config.png)
 
-**Configuration A — SQL tools only (execute queries, view plans, browse metadata):**
+**Configuration A — SQL read tools only (execute read-only queries, view plans, browse metadata):**
 
 ```json
 {
@@ -47,16 +67,17 @@ Read-only tools are annotated with `ToolAnnotations(readOnlyHint=True)` per the 
         "ADB_MYSQL_PORT": "3306",
         "ADB_MYSQL_USER": "your_username",
         "ADB_MYSQL_PASSWORD": "your_password",
-        "ADB_MYSQL_DATABASE": "your_database"
+        "ADB_MYSQL_DATABASE": "your_database",
+        "MCP_TOOLSETS": "sql"
       }
     }
   }
 }
 ```
 
-**Configuration B — OpenAPI tools (cluster management, diagnostics, monitoring):**
+**Configuration B — OpenAPI tools + SQL read tools:**
 
-> **Note**: Please set `ALIBABA_CLOUD_ACCESS_KEY_ID` and `ALIBABA_CLOUD_ACCESS_KEY_SECRET` to your Alibaba Cloud AccessKey credentials.
+> **Note**: OpenAPI tools include mutating administration capabilities such as account creation, whitelist modification, and query termination. Enable them only when you intentionally need management operations. The example below also keeps the `sql` tool group enabled, so it includes direct database connection settings.
 
 ```json
 {
@@ -74,14 +95,88 @@ Read-only tools are annotated with `ToolAnnotations(readOnlyHint=True)` per the 
       ],
       "env": {
         "ALIBABA_CLOUD_ACCESS_KEY_ID": "your_access_key_id",
-        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret"
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret",
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database",
+        "MCP_TOOLSETS": "openapi,sql"
       }
     }
   }
 }
 ```
 
-> You can combine both configurations by setting all environment variables together. When AK/SK is not configured, OpenAPI tools are automatically disabled — only SQL tools remain active.
+If you only want OpenAPI management tools and do not need SQL tools or resources, change `MCP_TOOLSETS` to `openapi` and remove the `ADB_MYSQL_*` direct database settings.
+
+**Configuration C — Full SQL execution through `execute_sql`:**
+
+> **Warning**: With `ENABLE_SQL_WRITE_TOOLS=true`, `execute_sql` exposes full SQL execution. The server only performs basic input validation and does not restrict statement type, comments, semicolons, multi-statement SQL, DDL, DML, DCL, or TCL. Enable it only for trusted users and use a least-privilege database account.
+
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "name": "adb-mysql-mcp-server",
+      "type": "stdio",
+      "isActive": true,
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
+        "run",
+        "adb-mysql-mcp-server"
+      ],
+      "env": {
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database",
+        "MCP_TOOLSETS": "sql",
+        "ENABLE_SQL_WRITE_TOOLS": "true"
+      }
+    }
+  }
+}
+```
+
+**Configuration D — OpenAPI tools + full SQL execution:**
+
+> **Warning**: This configuration enables both OpenAPI management capabilities and full SQL execution through `execute_sql`. Use it only with trusted clients, trusted users, and a least-privilege database account.
+
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "name": "adb-mysql-mcp-server",
+      "type": "stdio",
+      "isActive": true,
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
+        "run",
+        "adb-mysql-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "your_access_key_id",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret",
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database",
+        "MCP_TOOLSETS": "openapi,sql",
+        "ENABLE_SQL_WRITE_TOOLS": "true"
+      }
+    }
+  }
+}
+```
+
+> Without `MCP_TOOLSETS`, only the `sql` group is enabled, and `execute_sql` still runs in read-only mode by default. When AK/SK is not configured, OpenAPI tools are automatically disabled even if requested.
 
 ### 2.2 Using Claude Code
 
@@ -97,7 +192,33 @@ Add the following configuration to the Claude Code MCP config file (project-leve
 
 **stdio transport:**
 
-```json5
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
+        "run",
+        "adb-mysql-mcp-server"
+      ],
+      "env": {
+        "MCP_TOOLSETS": "sql",
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database"
+      }
+    }
+  }
+}
+```
+
+For OpenAPI management tools, add `ALIBABA_CLOUD_ACCESS_KEY_ID`, `ALIBABA_CLOUD_ACCESS_KEY_SECRET`, and explicitly include `openapi` in `MCP_TOOLSETS`. The example below uses the common setting `MCP_TOOLSETS=openapi,sql`, so it also includes direct database connection settings and the SQL read tools work after copying the config:
+
+```json
 {
   "mcpServers": {
     "adb-mysql-mcp-server": {
@@ -111,13 +232,70 @@ Add the following configuration to the Claude Code MCP config file (project-leve
       "env": {
         "ALIBABA_CLOUD_ACCESS_KEY_ID": "your_access_key_id",
         "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret",
-        "ALIBABA_CLOUD_SECURITY_TOKEN": "",
-        // Uncomment the following lines to enable SQL tools for direct database connection:
-        // "ADB_MYSQL_HOST": "your_adb_mysql_host",
-        // "ADB_MYSQL_PORT": "3306",
-        // "ADB_MYSQL_USER": "your_username",
-        // "ADB_MYSQL_PASSWORD": "your_password",
-        // "ADB_MYSQL_DATABASE": "your_database"
+        "MCP_TOOLSETS": "openapi,sql",
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database"
+      }
+    }
+  }
+}
+```
+
+If you only want OpenAPI management tools and do not need SQL tools or resources, change `MCP_TOOLSETS` to `openapi` and remove the `ADB_MYSQL_*` direct database settings.
+
+For full SQL execution through `execute_sql`, keep `MCP_TOOLSETS=sql` and set `ENABLE_SQL_WRITE_TOOLS=true`. Note that neither `MCP_TOOLSETS=sql` nor `MCP_TOOLSETS=all` enables full SQL execution by itself:
+
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
+        "run",
+        "adb-mysql-mcp-server"
+      ],
+      "env": {
+        "MCP_TOOLSETS": "sql",
+        "ENABLE_SQL_WRITE_TOOLS": "true",
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database"
+      }
+    }
+  }
+}
+```
+
+If you need both OpenAPI management and full SQL execution, use `MCP_TOOLSETS=openapi,sql` and set `ENABLE_SQL_WRITE_TOOLS=true`:
+
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/path/to/alibabacloud-adb-mysql-mcp-server",
+        "run",
+        "adb-mysql-mcp-server"
+      ],
+      "env": {
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": "your_access_key_id",
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": "your_access_key_secret",
+        "MCP_TOOLSETS": "openapi,sql",
+        "ENABLE_SQL_WRITE_TOOLS": "true",
+        "ADB_MYSQL_HOST": "your_adb_mysql_host",
+        "ADB_MYSQL_PORT": "3306",
+        "ADB_MYSQL_USER": "your_username",
+        "ADB_MYSQL_PASSWORD": "your_password",
+        "ADB_MYSQL_DATABASE": "your_database"
       }
     }
   }
@@ -127,16 +305,23 @@ Add the following configuration to the Claude Code MCP config file (project-leve
 **SSE transport** — start the server first, then configure the client:
 
 ```bash
-export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
-export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
-# Uncomment the following lines to enable SQL tools for direct database connection:
-# export ADB_MYSQL_HOST="your_adb_mysql_host"
-# export ADB_MYSQL_PORT="3306"
-# export ADB_MYSQL_USER="your_username"
-# export ADB_MYSQL_PASSWORD="your_password"
-# export ADB_MYSQL_DATABASE="your_database"
+export MCP_TOOLSETS=sql
+export ADB_MYSQL_HOST="your_adb_mysql_host"
+export ADB_MYSQL_PORT="3306"
+export ADB_MYSQL_USER="your_username"
+export ADB_MYSQL_PASSWORD="your_password"
+export ADB_MYSQL_DATABASE="your_database"
 export SERVER_TRANSPORT=sse
+export SERVER_HOST=127.0.0.1
 export SERVER_PORT=8000
+# API_KEY is required when SERVER_HOST is not a loopback address. Use at least 32 characters.
+# export API_KEY="replace-with-a-random-token-at-least-32-chars"
+# To enable OpenAPI management tools, add AK/SK and explicitly include openapi:
+# export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
+# export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+# export MCP_TOOLSETS=openapi,sql
+# To enable full SQL execution through execute_sql, explicitly set:
+# export ENABLE_SQL_WRITE_TOOLS=true
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
@@ -151,19 +336,49 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 }
 ```
 
+If the server is bound to a non-loopback host, configure `API_KEY` on the server side and send it from the client side as an HTTP header. In short: `API_KEY` is the server-side token, and `Authorization: Bearer <API_KEY>` is the client-side request header.
+
+```bash
+# Server side
+export SERVER_TRANSPORT=sse
+export SERVER_HOST=0.0.0.0
+export API_KEY="replace-with-a-random-token-at-least-32-chars"
+uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
+```
+
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "url": "http://your-server-host:8000/sse",
+      "headers": {
+        "Authorization": "Bearer replace-with-a-random-token-at-least-32-chars"
+      }
+    }
+  }
+}
+```
+
 **Streamable HTTP transport** — start the server first, then configure the client:
 
 ```bash
-export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
-export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
-# Uncomment the following lines to enable SQL tools for direct database connection:
-# export ADB_MYSQL_HOST="your_adb_mysql_host"
-# export ADB_MYSQL_PORT="3306"
-# export ADB_MYSQL_USER="your_username"
-# export ADB_MYSQL_PASSWORD="your_password"
-# export ADB_MYSQL_DATABASE="your_database"
+export MCP_TOOLSETS=sql
+export ADB_MYSQL_HOST="your_adb_mysql_host"
+export ADB_MYSQL_PORT="3306"
+export ADB_MYSQL_USER="your_username"
+export ADB_MYSQL_PASSWORD="your_password"
+export ADB_MYSQL_DATABASE="your_database"
 export SERVER_TRANSPORT=streamable_http
+export SERVER_HOST=127.0.0.1
 export SERVER_PORT=8000
+# API_KEY is required when SERVER_HOST is not a loopback address. Use at least 32 characters.
+# export API_KEY="replace-with-a-random-token-at-least-32-chars"
+# To enable OpenAPI management tools, add AK/SK and explicitly include openapi:
+# export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
+# export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+# export MCP_TOOLSETS=openapi,sql
+# To enable full SQL execution through execute_sql, explicitly set:
+# export ENABLE_SQL_WRITE_TOOLS=true
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
@@ -178,6 +393,21 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 }
 ```
 
+For `streamable_http` on a non-loopback host, use the same server-side `API_KEY` and client-side `Authorization: Bearer <API_KEY>` header pattern shown above. Full client JSON configuration example:
+
+```json
+{
+  "mcpServers": {
+    "adb-mysql-mcp-server": {
+      "url": "http://your-server-host:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer replace-with-a-random-token-at-least-32-chars"
+      }
+    }
+  }
+}
+```
+
 > **Note**: When `ADB_MYSQL_USER` and `ADB_MYSQL_PASSWORD` are not configured but AK/SK is available, a temporary database account is automatically created via OpenAPI for SQL execution and cleaned up afterward.
 
 ### 2.3 Using Cline
@@ -185,10 +415,19 @@ uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-serv
 Set environment variables and run the MCP server:
 
 ```bash
-export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
-export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+export MCP_TOOLSETS=sql
+export ADB_MYSQL_HOST="your_adb_mysql_host"
+export ADB_MYSQL_PORT="3306"
+export ADB_MYSQL_USER="your_username"
+export ADB_MYSQL_PASSWORD="your_password"
+export ADB_MYSQL_DATABASE="your_database"
 export SERVER_TRANSPORT=sse
+export SERVER_HOST=127.0.0.1
 export SERVER_PORT=8000
+# To enable OpenAPI management tools, add AK/SK and explicitly include openapi:
+# export ALIBABA_CLOUD_ACCESS_KEY_ID="your_access_key_id"
+# export ALIBABA_CLOUD_ACCESS_KEY_SECRET="your_access_key_secret"
+# export MCP_TOOLSETS=openapi,sql
 
 uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
@@ -198,6 +437,38 @@ Then configure the Cline remote server:
 ```
 remote_server = "http://127.0.0.1:8000/sse"
 ```
+
+### 2.4 Smoke Test
+
+After the server is started and connected to your MCP client, run these read-only statements to verify the setup without modifying data:
+
+```sql
+select 1 as ok;
+```
+
+```sql
+select current_date as today, current_timestamp as now_time;
+```
+
+You can also test query-plan tools with `get_query_plan` or `get_execution_plan`:
+
+```sql
+select 1 as plan_test;
+```
+
+In default read-only mode, the following multi-statement SQL should be rejected, which confirms single-statement protection is active:
+
+```sql
+select 1; select 2;
+```
+
+To further confirm write protection, run the following only in a test database or after confirming the table name. It should be rejected in default read-only mode:
+
+```sql
+update your_table set id = id where 1 = 0;
+```
+
+If you do not know a real table name yet, do not run table-specific SQL. Start with `show databases;`, the MCP resource `adbmysql:///databases`, or `adbmysql:///{database}/tables` to inspect metadata.
 
 ## 三、Environment Variables
 
@@ -212,12 +483,19 @@ remote_server = "http://127.0.0.1:8000/sse"
 | `ADB_MYSQL_PASSWORD` | No | Database password (direct-connection mode) |
 | `ADB_MYSQL_DATABASE` | No | Default database name (direct-connection mode) |
 | `ADB_MYSQL_CONNECT_TIMEOUT` | No | Database connection timeout in seconds, default 2 |
+| `ADB_MYSQL_MAX_SQL_LENGTH` | No | Maximum accepted SQL statement length, default 10000. Must be a positive integer |
 | `ADB_API_CONNECT_TIMEOUT` | No | OpenAPI connection timeout in milliseconds, default 10000 (10s) |
 | `ADB_API_READ_TIMEOUT` | No | OpenAPI read timeout in milliseconds, default 300000 (5min) |
+| `MCP_TOOLSETS` | No | Comma-separated tool groups to enable. Default: `sql`. Supported groups: `sql`, `openapi`; shortcut: `all` expands to `openapi,sql`. This variable only controls tool-group exposure and does not control full SQL execution permission |
 | `SERVER_TRANSPORT` | No | Transport protocol: `stdio` (default), `sse`, `streamable_http` |
+| `SERVER_HOST` | No | SSE/HTTP bind host, default `127.0.0.1`; non-loopback hosts require `API_KEY` |
 | `SERVER_PORT` | No | SSE/HTTP server port, default 8000 |
+| `API_KEY` | No | MCP HTTP auth token; clients must send `Authorization: Bearer <API_KEY>` when configured. Required on non-loopback hosts; use at least 32 characters |
+| `ENABLE_SQL_WRITE_TOOLS` | No | Controls whether `execute_sql` enters full SQL execution mode. Default: `false`; it must be explicitly set to `true` to enter full SQL execution mode. The actual executable scope is still limited by the database account privileges, database driver, and maximum SQL length |
 
 ## 四、Tool List
+
+By default, only the `sql` group is enabled and `execute_sql` only allows read-only SQL. The `openapi` group is enabled only when `openapi` is explicitly included in `MCP_TOOLSETS`. `MCP_TOOLSETS` only controls tool-group exposure; full SQL execution through `execute_sql` must be enabled separately with `ENABLE_SQL_WRITE_TOOLS=true`.
 
 ### 4.1 Cluster Management (group: `openapi`)
 
@@ -271,11 +549,13 @@ remote_server = "http://127.0.0.1:8000/sse"
 
 | Tool | Description |
 | --- | --- |
-| `execute_sql` | Execute SQL on an ADB MySQL cluster |
-| `get_query_plan` | Get EXPLAIN execution plan |
-| `get_execution_plan` | Get EXPLAIN ANALYZE actual execution plan |
+| `execute_sql` | Execute SQL on an ADB MySQL cluster. Read-only SQL is allowed by default; full SQL execution requires `ENABLE_SQL_WRITE_TOOLS=true` |
+| `get_query_plan` | Get EXPLAIN execution plan for a single SELECT or read-only WITH CTE statement |
+| `get_execution_plan` | Get EXPLAIN ANALYZE actual execution plan for a single SELECT or read-only WITH CTE statement |
 
 ### 4.6 MCP Resources (group: `sql`)
+
+MCP resources are assigned to the `sql` group because they read database metadata through the SQL connection, such as `SHOW DATABASES`, `SHOW TABLES`, `SHOW CREATE TABLE`, and `SHOW adb_config`. They are read-only metadata resources and are available together with the default SQL read group.
 
 | Resource URI | Description |
 | --- | --- |
@@ -284,7 +564,41 @@ remote_server = "http://127.0.0.1:8000/sse"
 | `adbmysql:///{database}/{table}/ddl` | Get table DDL |
 | `adbmysql:///config/{key}/value` | Get a config key value |
 
-## 五、Local Development
+## 五、Security Policy
+
+### 5.1 Read-only SQL Mode
+
+When `ENABLE_SQL_WRITE_TOOLS` is not set to `true`, `execute_sql` runs in read-only mode. The server validates SQL before opening a database connection:
+
+- Allows read-only SQL such as `SELECT`, `SHOW`, `DESCRIBE`, `DESC`, `EXPLAIN`, and read-only `WITH` CTE statements.
+- Allows one optional terminal semicolon and removes it before execution.
+- Rejects multi-statement SQL.
+- Rejects SQL comments outside strings or quoted identifiers.
+- Rejects unclosed strings or quoted identifiers.
+- Rejects write keywords in `SELECT` or `WITH` bodies, including nested write operations.
+- Rejects `SELECT ... INTO OUTFILE` and `SELECT ... INTO DUMPFILE`.
+
+This mode is intended to reduce accidental or unauthorized mutations by AI clients.
+
+### 5.2 Full SQL Execution Mode
+
+> **Risk notice:** Full SQL execution mode means the MCP server provides a general-purpose SQL execution entry point. After it is enabled, the server no longer attempts to classify SQL as read or write, and it does not block multi-statement SQL, comments, DDL, DML, DCL, or TCL. Enable it only for trusted users, trusted MCP clients, and least-privilege database accounts.
+
+When `ENABLE_SQL_WRITE_TOOLS=true`, `execute_sql` becomes a full SQL execution entry point. The server only performs basic input validation: the value must be a string, must not be empty after trimming, and must not exceed `ADB_MYSQL_MAX_SQL_LENGTH`.
+
+After this mode is enabled, the server no longer restricts statement type, comments, semicolons, multi-statement SQL, DDL, DML, DCL, or TCL, and it does not perform SQL syntax validation. Any SQL accepted by the configured database account and database driver may be executed.
+
+`get_query_plan` and `get_execution_plan` are not full SQL execution tools. They always validate their input as a single read-only `SELECT` or read-only `WITH` CTE statement, even when `ENABLE_SQL_WRITE_TOOLS=true`.
+
+### 5.3 Operational Recommendations
+
+- Do not expose SSE or Streamable HTTP on a public or shared network without a strong `API_KEY`.
+- Use high-entropy API keys and rotate them when they may have been shared.
+- Use read-only database accounts for read-only deployments.
+- Use least-privilege database accounts when full SQL execution is enabled.
+- Enable OpenAPI tools only in trusted administration scenarios.
+
+## 六、Local Development
 
 ```shell
 git clone https://github.com/aliyun/alibabacloud-adb-mysql-mcp-server
@@ -304,9 +618,16 @@ Debug with MCP Inspector:
 npx @modelcontextprotocol/inspector \
   -e ALIBABA_CLOUD_ACCESS_KEY_ID=your_ak \
   -e ALIBABA_CLOUD_ACCESS_KEY_SECRET=your_sk \
+  -e ADB_MYSQL_HOST=your_adb_mysql_host \
+  -e ADB_MYSQL_PORT=3306 \
+  -e ADB_MYSQL_USER=your_username \
+  -e ADB_MYSQL_PASSWORD=your_password \
+  -e ADB_MYSQL_DATABASE=your_database \
+  -e MCP_TOOLSETS=openapi,sql \
   uv --directory /path/to/alibabacloud-adb-mysql-mcp-server run adb-mysql-mcp-server
 ```
-## 六、SKILL
+
+## 七、SKILL
 
 In addition to the MCP server above, this project also provides an **independent** SKILL under the `skill/` directory. The Skill can be deployed directly to Claude Code without relying on this MCP server (it calls ADB MySQL OpenAPI through `call_adb_api.py` in the SKILL directory).
 

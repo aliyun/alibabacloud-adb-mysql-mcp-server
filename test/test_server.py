@@ -7,9 +7,17 @@
   - GROUP_EXPANSIONS 和 DEFAULT_GROUPS 常量
 """
 
+import pytest
 from unittest import mock
 
-from adb_mysql_mcp_server.server import mcp, _parse_groups, _has_openapi_credentials, GROUP_EXPANSIONS, DEFAULT_GROUPS
+from adb_mysql_mcp_server.server import (
+    DEFAULT_GROUPS,
+    GROUP_EXPANSIONS,
+    _has_openapi_credentials,
+    _parse_groups,
+    _run_until_interrupted,
+    mcp,
+)
 from adb_mysql_mcp_server.core.mcp import _ComponentType
 
 
@@ -18,11 +26,11 @@ class TestParseGroups:
 
     def test_default(self):
         """传入 None 时，应返回默认分组"""
-        assert _parse_groups(None) == ["openapi", "sql"]
+        assert _parse_groups(None) == ["sql"]
 
     def test_empty_string(self):
         """传入空字符串时，应返回默认分组"""
-        assert _parse_groups("") == ["openapi", "sql"]
+        assert _parse_groups("") == ["sql"]
 
     def test_single_group(self):
         """传入单个分组名，应返回仅包含该分组的列表"""
@@ -40,18 +48,13 @@ class TestParseGroups:
         """分组名前后的空格应被自动去除"""
         assert _parse_groups(" openapi , sql ") == ["openapi", "sql"]
 
-    def test_expansion_all(self):
-        """传入 'all' 应展开为所有已定义的分组"""
-        assert _parse_groups("all") == ["openapi", "sql"]
-
-    def test_expansion_deduplicates(self):
-        """传入 'openapi,all' 时，展开后应自动去重"""
-        result = _parse_groups("openapi,all")
-        assert result == ["openapi", "sql"]
-
     def test_custom_group_passthrough(self):
         """未在 GROUP_EXPANSIONS 中定义的自定义分组名应原样返回"""
         assert _parse_groups("custom") == ["custom"]
+
+    def test_all_expansion(self):
+        """all 快捷方式应展开为 openapi 和 sql 两个工具组"""
+        assert _parse_groups("all") == ["openapi", "sql"]
 
 
 class TestHasOpenApiCredentials:
@@ -147,6 +150,12 @@ class TestToolRegistration:
         assert "get_query_plan" in names
         assert "get_execution_plan" in names
 
+    def test_no_sql_write_group_tools(self):
+        """SQL 写权限由 execute_sql 内部控制，不再暴露独立 sql_write 工具组。"""
+        sql_write_tools = [t for t in mcp._pending_registrations
+                           if t.item_type == _ComponentType.TOOL and t.group == "sql_write"]
+        assert sql_write_tools == []
+
     def test_sql_group_resources(self):
         """'sql' 分组应包含 databases、tables、ddl、config 四个 MCP 资源"""
         resources = [t for t in mcp._pending_registrations
@@ -172,10 +181,22 @@ class TestGroupExpansions:
     """测试分组展开常量是否正确定义"""
 
     def test_all_expansion_defined(self):
-        """'all' 快捷方式应展开为 openapi + sql"""
-        assert "all" in GROUP_EXPANSIONS
+        """保留 all 快捷方式，展开为当前支持的两个工具组"""
         assert GROUP_EXPANSIONS["all"] == ["openapi", "sql"]
 
     def test_default_groups(self):
-        """默认分组应为 openapi + sql"""
-        assert DEFAULT_GROUPS == ["openapi", "sql"]
+        """默认分组应仅包含 sql 只读工具"""
+        assert DEFAULT_GROUPS == ["sql"]
+
+
+class TestRunUntilInterrupted:
+    """测试服务运行阶段的 Ctrl+C 处理。"""
+
+    def test_keyboard_interrupt_is_treated_as_graceful_shutdown(self):
+        """用户主动 Ctrl+C 时不应打印 traceback 或继续抛出异常"""
+        _run_until_interrupted(mock.Mock(side_effect=KeyboardInterrupt))
+
+    def test_runtime_error_is_not_swallowed(self):
+        """真实运行异常应继续向外抛出，避免掩盖启动失败"""
+        with pytest.raises(RuntimeError, match="boom"):
+            _run_until_interrupted(mock.Mock(side_effect=RuntimeError("boom")))
