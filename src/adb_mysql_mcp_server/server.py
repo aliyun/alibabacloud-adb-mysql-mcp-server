@@ -15,20 +15,26 @@ API reference:
 """
 
 import argparse
+import hmac
+import ipaddress
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import anyio
 import uvicorn
 from mcp.types import ToolAnnotations
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from alibabacloud_adb20211201 import models as adb_models
 
 from .core.mcp import AdbMCP
 from .db_service import DBService
 from .openapi_client import get_adb_client
+from .sql_safety import SqlSafetyValidator
 from .utils import (
     extract_first_column_from_json_rows,
     extract_second_column_from_first_row,
@@ -43,7 +49,11 @@ logger = logging.getLogger(__name__)
 READ_ONLY = ToolAnnotations(readOnlyHint=True)
 
 # Default groups enabled when MCP_TOOLSETS is not specified.
-DEFAULT_GROUPS = ["openapi", "sql"]
+DEFAULT_GROUPS = ["sql"]
+DEFAULT_SERVER_HOST = "127.0.0.1"
+API_KEY_MIN_LENGTH = 32
+TRUE_ENV_VALUES = {"1", "true", "yes", "on"}
+HTTP_TRANSPORTS = ("sse", "streamable_http")
 
 # Shortcut expansions for MCP_TOOLSETS values.
 GROUP_EXPANSIONS: dict[str, list[str]] = {
@@ -954,7 +964,7 @@ async def describe_inclined_tables(
 # SQL tools (group: sql)
 # =============================================================================
 
-@mcp.tool(group="sql", annotations=READ_ONLY)
+@mcp.tool(group="sql")
 async def execute_sql(
         query: str,
         region_id: Optional[str] = None,
@@ -973,8 +983,12 @@ async def execute_sql(
         db_cluster_id: Cluster ID, optional in direct mode.
         database: Target database name (optional).
     """
+    safe_query = SqlSafetyValidator.validate_sql(
+        query,
+        allow_write=_env_enabled(SqlSafetyValidator.SQL_WRITE_ENV),
+    )
     async with DBService(region_id, db_cluster_id, database) as svc:
-        return await svc.execute_sql(query)
+        return await svc.execute_sql(safe_query)
 
 
 @mcp.tool(group="sql", annotations=READ_ONLY)
@@ -994,8 +1008,9 @@ async def get_query_plan(
         db_cluster_id: Cluster ID, optional in direct mode.
         database: Target database name (optional).
     """
+    safe_query = SqlSafetyValidator.validate_explain_sql(query)
     async with DBService(region_id, db_cluster_id, database) as svc:
-        return await svc.execute_sql(f"EXPLAIN {query}")
+        return await svc.execute_sql(f"EXPLAIN {safe_query}")
 
 
 @mcp.tool(group="sql", annotations=READ_ONLY)
@@ -1015,8 +1030,9 @@ async def get_execution_plan(
         db_cluster_id: Cluster ID, optional in direct mode.
         database: Target database name (optional).
     """
+    safe_query = SqlSafetyValidator.validate_explain_sql(query)
     async with DBService(region_id, db_cluster_id, database) as svc:
-        return await svc.execute_sql(f"EXPLAIN ANALYZE {query}")
+        return await svc.execute_sql(f"EXPLAIN ANALYZE {safe_query}")
 
 
 # =============================================================================
@@ -1072,7 +1088,7 @@ async def resource_config_value(key: str) -> str:
 def _parse_groups(source: str | None) -> list[str]:
     """Parse a toolset group string into a deduplicated list of group names.
 
-    Supports GROUP_EXPANSIONS shortcuts (e.g. "all" -> ["openapi", "sql"]).
+    Supports explicit GROUP_EXPANSIONS shortcuts when defined.
     Returns DEFAULT_GROUPS when source is None or empty.
     """
     if not source:
@@ -1094,6 +1110,82 @@ def _has_openapi_credentials() -> bool:
     return bool(ak and sk)
 
 
+class VerifyHeaderMiddleware(BaseHTTPMiddleware):
+    """Middleware that validates Bearer token against the configured API_KEY."""
+    async def dispatch(self, request: Request, call_next):
+        api_key = _get_api_key()
+        if api_key:
+            # When API_KEY is configured, every HTTP request must carry the same bearer token.
+            request_key = _extract_bearer_token(request.headers.get("authorization"))
+            if not request_key:
+                return Response("Unauthorized", status_code=401)
+            if not hmac.compare_digest(request_key, api_key):
+                return Response("Unauthorized", status_code=401)
+        return await call_next(request)
+
+
+def _normalize_transport(transport: str) -> str:
+    """Normalize transport name by replacing hyphens with underscores."""
+    return transport.replace("-", "_")
+
+
+def _get_server_host() -> str:
+    """Return the configured SERVER_HOST, falling back to DEFAULT_SERVER_HOST."""
+    return os.getenv("SERVER_HOST", DEFAULT_SERVER_HOST).strip() or DEFAULT_SERVER_HOST
+
+
+def _get_api_key() -> str:
+    """Return the configured API_KEY (stripped), or empty string if unset."""
+    return os.getenv("API_KEY", "").strip()
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    """Extract the token from an 'Authorization: Bearer <token>' header value."""
+    if not authorization:
+        return ""
+    parts = authorization.strip().split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return ""
+    return parts[1]
+
+
+def _is_loopback_host(host: str) -> bool:
+    """Check whether the given host resolves to a loopback address (127.x or localhost)."""
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _env_enabled(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in TRUE_ENV_VALUES
+
+
+def _run_until_interrupted(run_server: Callable[[], None]) -> None:
+    try:
+        run_server()
+    except KeyboardInterrupt:
+        logger.info("MCP server stopped by user.")
+
+
+def _enforce_api_key_for_public_http_transport(transport: str, host: str) -> None:
+    if _normalize_transport(transport) not in HTTP_TRANSPORTS:
+        return
+    if _is_loopback_host(host):
+        return
+    api_key = _get_api_key()
+    if len(api_key) >= API_KEY_MIN_LENGTH:
+        return
+    if api_key:
+        raise ValueError(f"API_KEY must be at least {API_KEY_MIN_LENGTH} characters.")
+    raise ValueError(
+        "API_KEY is required when SERVER_TRANSPORT is sse or streamable_http "
+        "and SERVER_HOST is not a loopback address."
+    )
+
+
 def main(toolsets: Optional[str] = None) -> None:
     """MCP Server main entry point.
 
@@ -1113,20 +1205,34 @@ def main(toolsets: Optional[str] = None) -> None:
             "ALIBABA_CLOUD_ACCESS_KEY_SECRET not configured."
         )
 
+    # --- Resolve transport and validate security constraints ---
+    transport = os.getenv("SERVER_TRANSPORT", "stdio")
+    normalized_transport = _normalize_transport(transport)
+    if normalized_transport in HTTP_TRANSPORTS:
+        server_host = _get_server_host()
+        _enforce_api_key_for_public_http_transport(normalized_transport, server_host)
+
+    # --- Activate MCP tools/resources ---
     mcp.activate(enabled_groups=enabled_groups)
 
-    transport = os.getenv("SERVER_TRANSPORT", "stdio")
-    if transport in ("sse", "streamable_http"):
-        app = mcp.sse_app() if transport == "sse" else mcp.streamable_http_app()
+    # --- Start server ---
+    if normalized_transport in HTTP_TRANSPORTS:
+        app = (
+            mcp.sse_app()
+            if normalized_transport == "sse"
+            else mcp.streamable_http_app()
+        )
+        app.add_middleware(VerifyHeaderMiddleware)
         config = uvicorn.Config(
-            app, host="0.0.0.0",
+            app,
+            host=server_host,
             port=int(os.getenv("SERVER_PORT", 8000)),
             log_level="info",
         )
         server = uvicorn.Server(config)
-        anyio.run(server.serve)
+        _run_until_interrupted(lambda: anyio.run(server.serve))
     else:
-        mcp.run(transport=transport)
+        _run_until_interrupted(lambda: mcp.run(transport=transport))
 
 
 if __name__ == "__main__":
